@@ -23,7 +23,7 @@
  *
  */
 
-package io.github.brunorex;
+package ru.anseranser.jmkvpropedit;
 
 import java.awt.Component;
 import java.awt.event.MouseAdapter;

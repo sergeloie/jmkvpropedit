@@ -23,7 +23,7 @@
  *
  */
 
-package io.github.brunorex;
+package ru.anseranser.jmkvpropedit;
 
 import java.io.BufferedReader;
 import java.io.IOException;
