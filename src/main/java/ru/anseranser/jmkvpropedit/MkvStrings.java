@@ -56,7 +56,7 @@ public class MkvStrings {
 
     private final List<String> langNameList = readLines("langnames.txt");
     private final List<String> langCodeList = readLines("langcodes.txt");
-    private final List<String> mimeTypeList = readLines("mimetipes.txt");
+    private final List<String> mimeTypeList = readLines("mimetypes.txt");
 
     public List<String> getLangNameList() {
         return langNameList;

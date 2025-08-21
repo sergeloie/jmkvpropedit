@@ -45,31 +45,18 @@ public class Utils {
 
     /* Start of OS detection functions */
 
-    public static boolean isWindows() {
-        String OS = System.getProperty("os.name");
+    private static final String OS = System.getProperty("os.name").toLowerCase();
 
-        if (OS.toLowerCase().startsWith("windows"))
-            return true;
-        else
-            return false;
+    public static boolean isWindows() {
+        return OS.startsWith("windows");
     }
 
     public static boolean isMac() {
-        String OS = System.getProperty("os.name");
-
-        if (OS.toLowerCase().startsWith("mac"))
-            return true;
-        else
-            return false;
+        return OS.startsWith("mac");
     }
 
     public static boolean isLinux() {
-        String OS = System.getProperty("os.name");
-
-        if (OS.toLowerCase().startsWith("linux"))
-            return true;
-        else
-            return false;
+        return OS.startsWith("linux");
     }
 
     /* End of OS detection functions */
@@ -87,7 +74,6 @@ public class Utils {
 
     public static String escapeQuotes(String text) {
         text = text.replace("\"", "\\\"");
-
         return text;
     }
 
@@ -175,11 +161,7 @@ public class Utils {
         NumberFormat formatter = new DecimalFormat("0");
 
         if (pad > 0) {
-            String n = "";
-            for (int i = 0; i < pad; i++) {
-                n += 0;
-            }
-            formatter = new DecimalFormat(n);
+            formatter = new DecimalFormat("0".repeat(pad));
         }
 
         return formatter.format(number);
@@ -212,7 +194,7 @@ public class Utils {
     }
 
     /**
-     * http://niravjavadeveloper.blogspot.com/2011/05/resize-jtable-columns.html
+     * <a href="http://niravjavadeveloper.blogspot.com/2011/05/resize-jtable-columns.html">...</a>
      */
     public static void adjustColumnPreferredWidths(JTable table) {
         // strategy - get max width for cells in column and
