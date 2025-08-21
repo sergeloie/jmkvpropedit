@@ -38,7 +38,7 @@ public class Commandline {
      */
 
     public static String[] translateCommandline(String toProcess) {
-        if (toProcess == null || toProcess.length() == 0) {
+        if (toProcess == null || toProcess.isEmpty()) {
             // no command? no string
             return new String[0];
         }
@@ -48,16 +48,16 @@ public class Commandline {
         final int inQuote = 1;
         final int inDoubleQuote = 2;
         int state = normal;
-        StringTokenizer tok = new StringTokenizer(toProcess, "\"\' ", true);
-        Vector<String> v = new Vector<String>();
-        StringBuffer current = new StringBuffer();
+        StringTokenizer tok = new StringTokenizer(toProcess, "\"' ", true);
+        Vector<String> v = new Vector<>();
+        StringBuilder current = new StringBuilder();
         boolean lastTokenHasBeenQuoted = false;
 
         while (tok.hasMoreTokens()) {
             String nextTok = tok.nextToken();
             switch (state) {
             case inQuote:
-                if ("\'".equals(nextTok)) {
+                if ("'".equals(nextTok)) {
                     lastTokenHasBeenQuoted = true;
                     state = normal;
                 } else {
@@ -73,23 +73,22 @@ public class Commandline {
                 }
                 break;
             default:
-                if ("\'".equals(nextTok)) {
-                    state = inQuote;
-                } else if ("\"".equals(nextTok)) {
-                    state = inDoubleQuote;
-                } else if (" ".equals(nextTok)) {
-                    if (lastTokenHasBeenQuoted || current.length() != 0) {
-                        v.addElement(current.toString());
-                        current = new StringBuffer();
+                switch (nextTok) {
+                    case "'" -> state = inQuote;
+                    case "\"" -> state = inDoubleQuote;
+                    case " " -> {
+                        if (lastTokenHasBeenQuoted || !current.isEmpty()) {
+                            v.addElement(current.toString());
+                            current = new StringBuilder();
+                        }
                     }
-                } else {
-                    current.append(nextTok);
+                    case null, default -> current.append(nextTok);
                 }
                 lastTokenHasBeenQuoted = false;
                 break;
             }
         }
-        if (lastTokenHasBeenQuoted || current.length() != 0) {
+        if (lastTokenHasBeenQuoted || !current.isEmpty()) {
             v.addElement(current.toString());
         }
         /*

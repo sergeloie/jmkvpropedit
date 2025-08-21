@@ -25,8 +25,7 @@
 
 package ru.anseranser.jmkvpropedit;
 
-import java.awt.Component;
-import java.awt.Container;
+import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
@@ -36,8 +35,6 @@ import java.awt.dnd.DropTargetDragEvent;
 import java.awt.dnd.DropTargetDropEvent;
 import java.awt.dnd.DropTargetEvent;
 import java.awt.dnd.DropTargetListener;
-import java.awt.event.HierarchyEvent;
-import java.awt.event.HierarchyListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -167,11 +164,10 @@ public class FileDrop {
                             // Convert list to array
                             File[] filesTemp = new File[fileList.size()];
                             fileList.toArray(filesTemp);
-                            final File[] files = filesTemp;
 
                             // Alert listener to drop.
                             if (listener != null) {
-                                listener.filesDropped(files);
+                                listener.filesDropped(filesTemp);
                             }
 
                             // Mark that drop is completed.
@@ -184,14 +180,14 @@ public class FileDrop {
                             DataFlavor[] flavors = tr.getTransferDataFlavors();
                             boolean handled = false;
 
-                            for (int zz = 0; zz < flavors.length; zz++) {
-                                if (flavors[zz].isRepresentationClassReader()) {
+                            for (DataFlavor flavor : flavors) {
+                                if (flavor.isRepresentationClassReader()) {
                                     // Say we'll take it.
                                     // evt.acceptDrop (DnDConstants.ACTION_COPY_OR_MOVE);
                                     evt.acceptDrop(DnDConstants.ACTION_COPY);
                                     log(out, "FileDrop: reader accepted.");
 
-                                    Reader reader = flavors[zz].getReaderForText(tr);
+                                    Reader reader = flavor.getReaderForText(tr);
 
                                     BufferedReader br = new BufferedReader(reader);
 
@@ -264,22 +260,21 @@ public class FileDrop {
                 support = false;
             } // end catch
 
-            supportsDnD = Boolean.valueOf(support);
+            supportsDnD = support;
         } // end if: first time through
-        return supportsDnD.booleanValue();
+        return supportsDnD;
     } // end supportsDnD
-
-    // BEGIN 2007-09-12 Nathan Blomquist -- Linux (KDE/Gnome) support added.
-    private static String ZERO_CHAR_STRING = "" + (char) 0;
 
     private static File[] createFileArray(BufferedReader bReader, PrintStream out) {
         try {
-            List<File> list = new ArrayList<File>();
+            List<File> list = new ArrayList<>();
             String line = null;
 
             while ((line = bReader.readLine()) != null) {
                 try {
                     // kde seems to append a 0 char to the end of the reader
+                    // BEGIN 2007-09-12 Nathan Blomquist -- Linux (KDE/Gnome) support added.
+                    String ZERO_CHAR_STRING = "" + (char) 0;
                     if (ZERO_CHAR_STRING.equals(line))
                         continue;
 
@@ -290,7 +285,7 @@ public class FileDrop {
                 }
             }
 
-            return list.toArray(new File[list.size()]);
+            return list.toArray(File[]::new);
         } catch (IOException ex) {
             log(out, "FileDrop: IOException");
         }
@@ -311,35 +306,33 @@ public class FileDrop {
 
         // Listen for hierarchy changes and remove the drop target when the parent gets
         // cleared out.
-        c.addHierarchyListener(new HierarchyListener() {
-            public void hierarchyChanged(HierarchyEvent evt) {
-                log(out, "FileDrop: Hierarchy changed.");
-                Component parent = c.getParent();
+        // end hierarchyChanged
+        c.addHierarchyListener(evt -> {
+            log(out, "FileDrop: Hierarchy changed.");
+            Component parent = c.getParent();
 
-                if (parent == null) {
-                    c.setDropTarget(null);
-                    log(out, "FileDrop: Drop target cleared from component.");
-                } // end if: null parent
-                else {
-                    new DropTarget(c, dropListener);
-                    log(out, "FileDrop: Drop target added to component.");
-                } // end else: parent not null
-            } // end hierarchyChanged
+            if (parent == null) {
+                c.setDropTarget(null);
+                log(out, "FileDrop: Drop target cleared from component.");
+            } // end if: null parent
+            else {
+                new DropTarget(c, dropListener);
+                log(out, "FileDrop: Drop target added to component.");
+            } // end else: parent not null
         }); // end hierarchy listener
         if (c.getParent() != null) {
             new DropTarget(c, dropListener);
         }
 
-        if (recursive && (c instanceof Container)) {
+        if (recursive && (c instanceof Container cont)) {
             // Get the container
-            Container cont = (Container) c;
 
             // Get it's components
             Component[] comps = cont.getComponents();
 
             // Set it's components as listeners also
-            for (int i = 0; i < comps.length; i++) {
-                makeDropTarget(out, comps[i], recursive);
+            for (Component comp : comps) {
+                makeDropTarget(out, comp, recursive);
             }
         } // end if: recursively set components as listener
     } // end dropListener
@@ -421,8 +414,8 @@ public class FileDrop {
             if (recursive && (c instanceof Container)) {
                 Component[] comps = ((Container) c).getComponents();
 
-                for (int i = 0; i < comps.length; i++) {
-                    remove(out, comps[i], recursive);
+                for (Component comp : comps) {
+                    remove(out, comp, recursive);
                 }
 
                 return true;
@@ -449,7 +442,7 @@ public class FileDrop {
      *
      * @since 1.1
      */
-    public static interface Listener {
+    public interface Listener {
 
         /**
          * This method is called when files have been successfully dropped.
@@ -457,7 +450,7 @@ public class FileDrop {
          * @param files An array of <tt>File</tt>s that were dropped.
          * @since 1.0
          */
-        public abstract void filesDropped(File[] files);
+        void filesDropped(File[] files);
 
     } // end inner-interface Listener
 
@@ -479,7 +472,7 @@ public class FileDrop {
 
     public static class Event extends EventObject {
         private static final long serialVersionUID = 1L;
-        private File[] files;
+        private final File[] files;
 
         /**
          * Constructs an {@link Event} with the array of files that were dropped and the
@@ -668,7 +661,7 @@ public class FileDrop {
          * @return The dropped data
          * @since 1.1
          */
-        public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+        public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException {
             // Native object
             if (flavor.equals(DATA_FLAVOR)) {
                 return fetcher == null ? data : fetcher.getObject();
@@ -692,7 +685,8 @@ public class FileDrop {
          * @since 1.1
          */
         public boolean isDataFlavorSupported(DataFlavor flavor) {
-            // Native object
+            return DATA_FLAVOR.equals(flavor) || DataFlavor.stringFlavor.equals(flavor);
+/*            // Native object
             if (flavor.equals(DATA_FLAVOR)) {
                 return true;
             }
@@ -703,7 +697,7 @@ public class FileDrop {
             }
 
             // We can't do anything else
-            return false;
+            return false;*/
         } // end isDataFlavorSupported
 
         /* ******** I N N E R I N T E R F A C E F E T C H E R ******** */
@@ -721,14 +715,14 @@ public class FileDrop {
          * @version 1.1
          * @since 1.1
          */
-        public static interface Fetcher {
+        public interface Fetcher {
             /**
              * Return the object being encapsulated in the {@link TransferableObject}.
              *
              * @return The dropped object
              * @since 1.1
              */
-            public abstract Object getObject();
+            Object getObject();
         } // end inner interface Fetcher
     } // end class TransferableObject
 } // end class FileDrop
