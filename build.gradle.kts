@@ -1,6 +1,7 @@
 plugins {
     application
     id("org.graalvm.buildtools.native") version "0.11.0"
+    id("edu.sc.seis.launch4j") version "3.0.6"
 }
 
 repositories {
@@ -15,7 +16,7 @@ java {
 }
 
 application {
-    mainClass.set("io.github.brunorex.JMkvpropedit")
+    mainClass.set("ru.anseranser.jmkvpropedit.JMkvpropedit")
 }
 
 
@@ -36,4 +37,9 @@ graalvmNative {
             useFatJar.set(true)
         }
     }
+}
+
+launch4j {
+    mainClassName = "ru.anseranser.jmkvpropedit.JMkvpropedit"
+    outfile = "jmkvpropedit.exe"
 }
