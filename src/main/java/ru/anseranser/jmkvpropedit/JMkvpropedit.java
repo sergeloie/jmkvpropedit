@@ -136,7 +136,7 @@ public class JMkvpropedit {
             "Matroska files (*.mkv; *.mka; *.mk3d; *.webm; *.mks)", "mkv", "mka", "mk3d", "webm", "mks");
 
     private IOFileFilter MATROSKA_FILE_FILTER = new WildcardFileFilter(
-            new String[] { "*.mkv", "*.mka", "*.mk3d", ".webm", ".mks" }, IOCase.INSENSITIVE);
+            new String[] { "*.mkv", "*.mka", "*.mk3d", "*.webm", "*.mks" }, IOCase.INSENSITIVE);
 
     private FileFilter TXT_EXT_FILTER = new FileNameExtensionFilter("Plain text files (*.txt)", "txt");
 
@@ -1075,7 +1075,7 @@ public class JMkvpropedit {
         pnlAttachAddControls.add(lblAttachAddMime, gbc_lblAttachAddMime);
 
         cbAttachAddMime = new JComboBox<String>();
-        cbAttachAddMime.setModel(new DefaultComboBoxModel<String>(mkvStrings.getMimeTypes()));
+        cbAttachAddMime.setModel(new DefaultComboBoxModel<String>(mimeComboItems()));
         GridBagConstraints gbc_cbAttachAddMime = new GridBagConstraints();
         gbc_cbAttachAddMime.insets = new Insets(0, 0, 5, 5);
         gbc_cbAttachAddMime.fill = GridBagConstraints.HORIZONTAL;
@@ -1222,9 +1222,7 @@ public class JMkvpropedit {
         txtAttachReplaceOrig.setColumns(10);
 
         cbAttachReplaceOrig = new JComboBox<String>();
-        List<String> mimeList = mkvStrings.getMimeTypeList();
-        mimeList.remove(0);
-        cbAttachReplaceOrig.setModel(new DefaultComboBoxModel<String>(mimeList.toArray(new String[mimeList.size()])));
+        cbAttachReplaceOrig.setModel(new DefaultComboBoxModel<String>(mimeComboItems()));
         cbAttachReplaceOrig.setVisible(false);
         pnlAttachReplaceOrig.add(cbAttachReplaceOrig, "cbAttachReplaceOrig");
 
@@ -1296,7 +1294,7 @@ public class JMkvpropedit {
         pnlAttachReplaceControls.add(lblAttachReplaceMime, gbc_lblAttachReplaceMime);
 
         cbAttachReplaceMime = new JComboBox<String>();
-        cbAttachReplaceMime.setModel(new DefaultComboBoxModel<String>(mkvStrings.getMimeTypes()));
+        cbAttachReplaceMime.setModel(new DefaultComboBoxModel<String>(mimeComboItems()));
         GridBagConstraints gbc_cbAttachReplaceMime = new GridBagConstraints();
         gbc_cbAttachReplaceMime.insets = new Insets(0, 0, 5, 5);
         gbc_cbAttachReplaceMime.fill = GridBagConstraints.HORIZONTAL;
@@ -1445,7 +1443,7 @@ public class JMkvpropedit {
 
         cbAttachDeleteValue = new JComboBox<String>();
         cbAttachDeleteValue.setVisible(false);
-        cbAttachDeleteValue.setModel(new DefaultComboBoxModel<String>(mimeList.toArray(new String[mimeList.size()])));
+        cbAttachDeleteValue.setModel(new DefaultComboBoxModel<String>(mimeComboItems()));
         pnlAttachDeleteValue.add(cbAttachDeleteValue, "cbAttachDeleteValue");
 
         pnlAttachDeleteControlsBottom = new JPanel();
@@ -1915,13 +1913,7 @@ public class JMkvpropedit {
 
         btnBrowseChapters.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                chooser.setDialogTitle("Select chapters file");
-                chooser.setMultiSelectionEnabled(false);
-                chooser.setAcceptAllFileFilterUsed(false);
-                chooser.resetChoosableFileFilters();
-                chooser.setFileFilter(TXT_EXT_FILTER);
-                chooser.setFileFilter(XML_EXT_FILTER);
+                configureTextFileChooser(chooser, "Select chapters file");
 
                 int open = chooser.showOpenDialog(frmJMkvpropedit);
 
@@ -1985,13 +1977,7 @@ public class JMkvpropedit {
 
         btnBrowseTags.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                chooser.setDialogTitle("Select tags file");
-                chooser.setMultiSelectionEnabled(false);
-                chooser.setAcceptAllFileFilterUsed(false);
-                chooser.resetChoosableFileFilters();
-                chooser.setFileFilter(TXT_EXT_FILTER);
-                chooser.setFileFilter(XML_EXT_FILTER);
+                configureTextFileChooser(chooser, "Select tags file");
 
                 int open = chooser.showOpenDialog(frmJMkvpropedit);
 
@@ -5011,6 +4997,58 @@ public class JMkvpropedit {
     /* End of table methods */
 
     /* Start of file methods */
+
+    /**
+     * Shared setup for the chapters/tags file choosers.
+     *
+     * <p>
+     * Both filters must be <em>choosable</em> (visible in the type dropdown).
+     * {@link JFileChooser#setFileFilter} only changes the current selection and
+     * does not add to the choosable list per its API contract, so two
+     * consecutive calls would leave the first filter unreachable on look and
+     * feels that do not re-add it as a side effect. Use
+     * {@link JFileChooser#addChoosableFileFilter} for both and keep XML as the
+     * current default (matches the previous last-call wins behaviour).
+     * </p>
+     */
+    private void configureTextFileChooser(JFileChooser fileChooser, String dialogTitle) {
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setDialogTitle(dialogTitle);
+        fileChooser.setMultiSelectionEnabled(false);
+        fileChooser.setAcceptAllFileFilterUsed(false);
+        fileChooser.resetChoosableFileFilters();
+        fileChooser.addChoosableFileFilter(TXT_EXT_FILTER);
+        fileChooser.addChoosableFileFilter(XML_EXT_FILTER);
+        fileChooser.setFileFilter(XML_EXT_FILTER);
+    }
+
+    /**
+     * Items for the attachment MIME combos (add / replace orig / replace mime /
+     * delete value).
+     *
+     * <p>
+     * Returns a fresh array so the shared {@link MkvStrings} resource list is
+     * never mutated (the old {@code remove(0)} call dropped the first element
+     * from every later combo). Skips the corrupted {@code _} artifact in
+     * {@code mimetypes.txt} and keeps a leading empty item: add/replace treat
+     * an empty MIME as "omit --attachment-mime-type" (auto-detect), while
+     * replace-orig/delete reject empty values in their action listeners.
+     * </p>
+     */
+    private String[] mimeComboItems() {
+        List<String> items = new ArrayList<>();
+        items.add("");
+
+        for (String mime : mkvStrings.getMimeTypeList()) {
+            if (mime.isEmpty() || "_".equals(mime)) {
+                continue;
+            }
+
+            items.add(mime);
+        }
+
+        return items.toArray(new String[items.size()]);
+    }
 
     private void addFile(File file, boolean checkExtension) {
         try {
