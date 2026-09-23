@@ -1,7 +1,7 @@
 plugins {
     application
-    id("org.graalvm.buildtools.native") version "0.11.0"
-    id("edu.sc.seis.launch4j") version "3.0.6"
+    id("org.graalvm.buildtools.native") version "1.1.14"
+    id("edu.sc.seis.launch4j") version "4.0.0"
 }
 
 repositories {
@@ -19,10 +19,14 @@ application {
     mainClass.set("ru.anseranser.jmkvpropedit.JMkvpropedit")
 }
 
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:deprecation")
+}
+
 
 
 dependencies {
-    implementation("commons-io:commons-io:2.20.0")
+    implementation("commons-io:commons-io:2.22.0")
     implementation("org.ini4j:ini4j:0.5.4")
 }
 
