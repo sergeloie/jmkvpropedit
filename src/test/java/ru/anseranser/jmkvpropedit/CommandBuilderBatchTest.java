@@ -78,7 +78,7 @@ class CommandBuilderBatchTest {
                 new String[] { " G0", " G1" }, new String[] { " g0", " g1" });
 
         CommandBuilder.Batch batch = new CommandBuilder(true).buildBatch("mkvpropedit",
-                List.of("first.mkv", "second.mkv"), general, blank(), blank(), blank(), none());
+                List.of("first.mkv", "second.mkv"), general, blanks(2), blanks(2), blanks(2), none());
 
         assertEquals(2, batch.lines().size());
         assertEquals(2, batch.optArgs().size());
@@ -112,6 +112,13 @@ class CommandBuilderBatchTest {
 
     private static CommandBuilder.Section blank() {
         return section("", "");
+    }
+
+    /** {@code count} empty entries — section arrays must match the file count. */
+    private static CommandBuilder.Section blanks(int count) {
+        String[] empty = new String[count];
+        java.util.Arrays.fill(empty, "");
+        return new CommandBuilder.Section(empty.clone(), empty);
     }
 
     private static CommandBuilder.Attachments none() {

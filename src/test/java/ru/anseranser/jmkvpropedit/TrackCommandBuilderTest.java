@@ -172,8 +172,8 @@ class TrackCommandBuilderTest {
     void fileNamePlaceholderSubstitutesPerFile() {
         CommandBuilder.Section section = new CommandBuilder().buildTracks(FILES, 'v', List.of(named("E{file_name}")));
 
-        assertEquals(" --edit track:v1 --set name=\"first\"", section.plain()[0]);
-        assertEquals(" --edit track:v1 --set name=\"second\"", section.plain()[1]);
+        assertEquals(" --edit track:v1 --set name=\"Efirst\"", section.plain()[0]);
+        assertEquals(" --edit track:v1 --set name=\"Esecond\"", section.plain()[1]);
     }
 
     @Test
