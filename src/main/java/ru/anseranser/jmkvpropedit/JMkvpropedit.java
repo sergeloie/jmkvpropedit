@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -100,10 +101,7 @@ public class JMkvpropedit {
     private static final int MAX_STREAMS = 200;
     private static String[] argsArray;
 
-    private Process proc = null;
-    private ProcessBuilder pb = new ProcessBuilder();
     private SwingWorker<Void, Void> worker = null;
-    private boolean exeFound = true;
 
     private File iniFile = new File("JMkvpropedit.ini");
     private static final MkvStrings mkvStrings = new MkvStrings();
@@ -4742,20 +4740,37 @@ public class JMkvpropedit {
     }
 
     private void executeBatch() {
+        // One-shot UI setup runs here, on the EDT (executeBatch is called from
+        // the button listener), so the background worker never touches Swing:
+        // log appends go through appendOutput, and done() restores the controls.
+        txtOutput.setText("");
+        pnlTabs.setSelectedIndex(pnlTabs.getTabCount() - 1);
+        pnlTabs.setEnabled(false);
+        btnProcessFiles.setEnabled(false);
+        btnGenerateCmdLine.setEnabled(false);
+
+        // Snapshot the inputs so the worker only reads plain data: disabling
+        // the tab pane does not stop the file list from being edited while the
+        // batch runs.
+        final JTextArea output = txtOutput;
+        final List<String> batch = List.copyOf(cmdLineBatch);
+        final List<String> batchOpt = List.copyOf(cmdLineBatchOpt);
+        final List<String> fileNames = new ArrayList<>();
+        for (int i = 0; i < modelFiles.getSize(); i++) {
+            fileNames.add(modelFiles.get(i));
+        }
+        final String exePath = txtMkvPropExe.getText();
+
         worker = new SwingWorker<Void, Void>() {
             @Override
             public Void doInBackground() {
-                txtOutput.setText("");
-                pnlTabs.setSelectedIndex(pnlTabs.getTabCount() - 1);
-                pnlTabs.setEnabled(false);
-                btnProcessFiles.setEnabled(false);
-                btnGenerateCmdLine.setEnabled(false);
+                for (int i = 0; i < batch.size(); i++) {
+                    Process proc = null;
 
-                for (int i = 0; i < cmdLineBatch.size(); i++) {
                     try {
                         File optFile = new File("options.json");
                         PrintWriter optFilePW = new PrintWriter(optFile, "UTF-8");
-                        String[] optFileContents = Commandline.translateCommandline(cmdLineBatchOpt.get(i));
+                        String[] optFileContents = Commandline.translateCommandline(batchOpt.get(i));
                         int optFileMaxLines = optFileContents.length - 1;
 
                         if (!optFile.exists()) {
@@ -4778,28 +4793,35 @@ public class JMkvpropedit {
                         optFilePW.flush();
                         optFilePW.close();
 
-                        pb.command(txtMkvPropExe.getText(), "@options.json");
+                        ProcessBuilder pb = new ProcessBuilder(exePath, "@options.json");
                         pb.redirectErrorStream(true);
 
-                        txtOutput.append("File: " + modelFiles.get(i) + "\n");
-                        txtOutput.append("Command line: " + cmdLineBatch.get(i) + "\n\n");
+                        appendOutput("File: " + fileNames.get(i) + "\n");
+                        appendOutput("Command line: " + batch.get(i) + "\n\n");
 
                         proc = pb.start();
 
-                        StreamGobbler outputGobbler = new StreamGobbler(proc.getInputStream(), txtOutput);
+                        StreamGobbler outputGobbler = new StreamGobbler(proc.getInputStream(), output);
                         outputGobbler.start();
 
                         proc.waitFor();
+                        // The reader stops at EOF; joining it guarantees the
+                        // whole process output reaches the log before the next
+                        // separator (replaces the old fixed sleep).
+                        outputGobbler.join();
 
                         optFile.delete();
 
-                        if (i < cmdLineBatch.size() - 1) {
-                            txtOutput.append("--------------\n\n");
+                        if (i < batch.size() - 1) {
+                            appendOutput("--------------\n\n");
                         }
-
-                        Thread.sleep(10);
                     } catch (IOException e) {
+                        appendOutput("Error: " + e + "\n");
                     } catch (InterruptedException e) {
+                        if (proc != null) {
+                            proc.destroy();
+                        }
+                        Thread.currentThread().interrupt();
                         break;
                     }
                 }
@@ -4816,6 +4838,17 @@ public class JMkvpropedit {
         };
 
         worker.execute();
+    }
+
+    /**
+     * Appends to the output area from any thread; the append itself always
+     * runs on the EDT, in submission order with the gobbler's own appends.
+     */
+    private void appendOutput(final String text) {
+        SwingUtilities.invokeLater(() -> {
+            txtOutput.append(text);
+            txtOutput.setCaretPosition(txtOutput.getDocument().getLength());
+        });
     }
 
     private void parseFiles(String[] argsArray) {
@@ -4842,34 +4875,33 @@ public class JMkvpropedit {
     }
 
     private boolean isExecutableInPath(final String exe) {
-        worker = new SwingWorker<Void, Void>() {
-            @Override
-            public Void doInBackground() {
-                try {
-                    pb.command(exe);
-                    pb.redirectErrorStream(true);
-                    proc = pb.start();
+        ProcessBuilder pb = new ProcessBuilder(exe);
+        pb.redirectErrorStream(true);
 
-                    BufferedReader in = new BufferedReader(new InputStreamReader(proc.getInputStream()));
-                    proc.waitFor();
-                    in.close();
+        try {
+            Process proc = pb.start();
 
-                    exeFound = true;
-                } catch (IOException e) {
-                    exeFound = false;
-                } catch (InterruptedException e) {
-                    exeFound = false;
+            // Drain the merged output as explicit UTF-8 before waiting: reading
+            // until EOF proves the child has finished and can never block it on
+            // a full pipe (the old waitFor-before-read order could deadlock).
+            // No SwingWorker here: the probe never touches Swing, so there is
+            // nothing to marshal — and an isDone busy-wait would only spin the
+            // EDT.
+            try (BufferedReader in = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+                while (in.readLine() != null) {
+                    // discard the probe output
                 }
-
-                return null;
             }
-        };
 
-        worker.execute();
-        while (!worker.isDone()) {
+            proc.waitFor();
+            return true;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
-
-        return exeFound;
     }
 
     /* End of command line methods */
