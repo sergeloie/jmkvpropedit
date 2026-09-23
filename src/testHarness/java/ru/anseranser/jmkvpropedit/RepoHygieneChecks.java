@@ -15,7 +15,8 @@ import java.util.stream.Stream;
 /**
  * Repo hygiene checks for issue #7: no manual GC, no swallowed exceptions,
  * no misspelled UI strings/identifiers, an up-to-date readme, and no
- * pre-Gradle artifacts ({@code lib/}, {@code *.iml}).
+ * pre-Gradle artifacts ({@code lib/}, {@code *.iml}). Issue #8 adds the
+ * commons-io removal check (sources + Gradle dependencies on java.nio).
  *
  * <p>
  * The Gradle build files are out of scope for these issues, so this harness is
@@ -74,6 +75,7 @@ public final class RepoHygieneChecks {
         checkNoMisspellings(sources, root.resolve("readme.txt"));
         checkReadmeRequiresJava21(root.resolve("readme.txt"));
         checkNoPreGradleArtifacts(root);
+        checkNoCommonsIo(root.resolve("build.gradle.kts"), sources);
         checkMethodRename();
 
         System.out.println();
@@ -187,6 +189,33 @@ public final class RepoHygieneChecks {
 
         check(".gitignore keeps lib/ and *.iml from returning", ignoresLib && ignoresIml,
                 "ignores /lib/=" + ignoresLib + ", ignores *.iml=" + ignoresIml);
+    }
+
+    /** AC (issue #8): commons-io is gone from sources and Gradle dependencies. */
+    private static void checkNoCommonsIo(Path buildGradle, List<Path> sources) {
+        List<String> hits = new ArrayList<>();
+
+        for (Path p : sources) {
+            String text = read(p);
+            int at = text.indexOf("org.apache.commons.io");
+
+            if (at >= 0) {
+                hits.add(p + ":" + lineNumber(text, at));
+            }
+        }
+
+        check("no org.apache.commons.io usage in sources", hits.isEmpty(), String.join(", ", hits));
+
+        if (!Files.isRegularFile(buildGradle)) {
+            check("commons-io removed from build.gradle.kts", false, "build.gradle.kts not found");
+            return;
+        }
+
+        String text = read(buildGradle);
+        int at = text.indexOf("commons-io");
+
+        check("commons-io removed from build.gradle.kts", at < 0,
+                at < 0 ? "" : buildGradle + ":" + lineNumber(text, at));
     }
 
     /** AC: the misspelled getMkvPropExeDefaullt() was renamed, not just its call site. */

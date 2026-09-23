@@ -59,7 +59,6 @@ tasks.withType<JavaCompile> {
 
 
 dependencies {
-    implementation("commons-io:commons-io:2.22.0")
     implementation("org.ini4j:ini4j:0.5.4")
 }
 
