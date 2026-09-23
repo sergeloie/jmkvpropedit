@@ -118,6 +118,8 @@ tasks.register<Exec>("jpackage") {
                 "jpackage not found at $jpackageBin — a full JDK 21 installation is required"
             )
         }
+        // jpackage refuses to overwrite a previous image/installer, so start clean.
+        destDir.deleteRecursively()
         destDir.mkdirs()
     }
 }
