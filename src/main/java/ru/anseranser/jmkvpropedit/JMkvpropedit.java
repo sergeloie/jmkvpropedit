@@ -2064,12 +2064,27 @@ public class JMkvpropedit {
 
         btnRemoveVideo.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                if (cbVideo.getSelectedIndex() > 0) {
-                    int idx = cbVideo.getItemCount() - 1;
+                int idx = cbVideo.getSelectedIndex();
+
+                if (idx >= 0 && cbVideo.getItemCount() > 1) {
+                    removeTrackSlot(idx, nVideo, "subPnlVideo", lyrdPnlVideo, subPnlVideo,
+                            chbEditVideo, chbEnableVideo, rbYesEnableVideo, rbNoEnableVideo, bgRbEnableVideo,
+                            chbDefaultVideo, rbYesDefVideo, rbNoDefVideo, bgRbDefVideo,
+                            chbForcedVideo, rbYesForcedVideo, rbNoForcedVideo, bgRbForcedVideo,
+                            chbNameVideo, txtNameVideo, chbNumbVideo, lblNumbStartVideo, txtNumbStartVideo,
+                            lblNumbPadVideo, txtNumbPadVideo, lblNumbExplainVideo, chbLangVideo,
+                            chbExtraCmdVideo, txtExtraCmdVideo, cbLangVideo);
+                    nVideo--;
 
                     cbVideo.removeItemAt(idx);
-                    lyrdPnlVideo.remove(idx);
-                    nVideo--;
+                    int keepSelected = Math.min(idx, cbVideo.getItemCount() - 1);
+                    for (int i = idx; i < cbVideo.getItemCount(); i++) {
+                        cbVideo.insertItemAt("Video Track " + (i + 1), i);
+                        cbVideo.removeItemAt(i + 1);
+                    }
+                    cbVideo.setSelectedIndex(keepSelected);
+
+                    lytLyrdPnlVideo.show(lyrdPnlVideo, "subPnlVideo[" + cbVideo.getSelectedIndex() + "]");
                 }
 
                 if (cbVideo.getItemCount() < MAX_STREAMS && !btnAddVideo.isEnabled()) {
@@ -2108,12 +2123,27 @@ public class JMkvpropedit {
 
         btnRemoveAudio.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                if (cbAudio.getSelectedIndex() > 0) {
-                    int idx = cbAudio.getItemCount() - 1;
+                int idx = cbAudio.getSelectedIndex();
+
+                if (idx >= 0 && cbAudio.getItemCount() > 1) {
+                    removeTrackSlot(idx, nAudio, "subPnlAudio", lyrdPnlAudio, subPnlAudio,
+                            chbEditAudio, chbEnableAudio, rbYesEnableAudio, rbNoEnableAudio, bgRbEnableAudio,
+                            chbDefaultAudio, rbYesDefAudio, rbNoDefAudio, bgRbDefAudio,
+                            chbForcedAudio, rbYesForcedAudio, rbNoForcedAudio, bgRbForcedAudio,
+                            chbNameAudio, txtNameAudio, chbNumbAudio, lblNumbStartAudio, txtNumbStartAudio,
+                            lblNumbPadAudio, txtNumbPadAudio, lblNumbExplainAudio, chbLangAudio,
+                            chbExtraCmdAudio, txtExtraCmdAudio, cbLangAudio);
+                    nAudio--;
 
                     cbAudio.removeItemAt(idx);
-                    lyrdPnlAudio.remove(idx);
-                    nAudio--;
+                    int keepSelected = Math.min(idx, cbAudio.getItemCount() - 1);
+                    for (int i = idx; i < cbAudio.getItemCount(); i++) {
+                        cbAudio.insertItemAt("Audio Track " + (i + 1), i);
+                        cbAudio.removeItemAt(i + 1);
+                    }
+                    cbAudio.setSelectedIndex(keepSelected);
+
+                    lytLyrdPnlAudio.show(lyrdPnlAudio, "subPnlAudio[" + cbAudio.getSelectedIndex() + "]");
                 }
 
                 if (cbAudio.getItemCount() < MAX_STREAMS && !btnAddAudio.isEnabled()) {
@@ -2152,12 +2182,28 @@ public class JMkvpropedit {
 
         btnRemoveSubtitle.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                if (cbSubtitle.getSelectedIndex() > 0) {
-                    int idx = cbSubtitle.getItemCount() - 1;
+                int idx = cbSubtitle.getSelectedIndex();
+
+                if (idx >= 0 && cbSubtitle.getItemCount() > 1) {
+                    removeTrackSlot(idx, nSubtitle, "subPnlSubtitle", lyrdPnlSubtitle, subPnlSubtitle,
+                            chbEditSubtitle, chbEnableSubtitle, rbYesEnableSubtitle, rbNoEnableSubtitle,
+                            bgRbEnableSubtitle, chbDefaultSubtitle, rbYesDefSubtitle, rbNoDefSubtitle,
+                            bgRbDefSubtitle, chbForcedSubtitle, rbYesForcedSubtitle, rbNoForcedSubtitle,
+                            bgRbForcedSubtitle, chbNameSubtitle, txtNameSubtitle, chbNumbSubtitle,
+                            lblNumbStartSubtitle, txtNumbStartSubtitle, lblNumbPadSubtitle, txtNumbPadSubtitle,
+                            lblNumbExplainSubtitle, chbLangSubtitle, chbExtraCmdSubtitle, txtExtraCmdSubtitle,
+                            cbLangSubtitle);
+                    nSubtitle--;
 
                     cbSubtitle.removeItemAt(idx);
-                    lyrdPnlSubtitle.remove(idx);
-                    nSubtitle--;
+                    int keepSelected = Math.min(idx, cbSubtitle.getItemCount() - 1);
+                    for (int i = idx; i < cbSubtitle.getItemCount(); i++) {
+                        cbSubtitle.insertItemAt("Subtitle Track " + (i + 1), i);
+                        cbSubtitle.removeItemAt(i + 1);
+                    }
+                    cbSubtitle.setSelectedIndex(keepSelected);
+
+                    lytLyrdPnlSubtitle.show(lyrdPnlSubtitle, "subPnlSubtitle[" + cbSubtitle.getSelectedIndex() + "]");
                 }
 
                 if (cbSubtitle.getItemCount() < MAX_STREAMS && !btnAddSubtitle.isEnabled()) {
@@ -4062,6 +4108,42 @@ public class JMkvpropedit {
 
     /* End of track addition methods */
 
+    /* Start of track removal methods */
+
+    /**
+     * Removes the track slot at {@code index}: drops its card, renumbers the
+     * following cards and shifts every per-track slot array one position left,
+     * so combo index, card name and array slot stay aligned.
+     *
+     * @param index      the combo/card/array slot to remove
+     * @param trackCount the current number of tracks (nVideo/nAudio/nSubtitle)
+     * @param cardPrefix card constraint prefix, e.g. {@code subPnlVideo}
+     * @param cardsPanel panel holding the track cards in a CardLayout
+     * @param subPanels  per-slot card panels
+     * @param slotArrays every other per-slot component array of this track type
+     */
+    private static void removeTrackSlot(int index, int trackCount, String cardPrefix,
+            JPanel cardsPanel, JPanel[] subPanels, Object[]... slotArrays) {
+        cardsPanel.remove(subPanels[index]);
+
+        for (int i = index + 1; i < trackCount; i++) {
+            cardsPanel.remove(subPanels[i]);
+            cardsPanel.add(subPanels[i], cardPrefix + "[" + (i - 1) + "]");
+        }
+
+        shiftSlotsLeft(subPanels, index);
+        for (Object[] slots : slotArrays) {
+            shiftSlotsLeft(slots, index);
+        }
+    }
+
+    private static void shiftSlotsLeft(Object[] slots, int index) {
+        System.arraycopy(slots, index + 1, slots, index, slots.length - index - 1);
+        slots[slots.length - 1] = null;
+    }
+
+    /* End of track removal methods */
+
     /* Start of command line methods */
 
     private void setCmdLineGeneral() {
@@ -4280,7 +4362,7 @@ public class JMkvpropedit {
 
                 if (chbNumbVideo[i].isSelected() && chbEditVideo[i].isSelected()) {
                     tmpText = tmpText.replace("{num}", Utils.padNumber(numPadVideo[i], numStartVideo[i]));
-                    tmpText2 = tmpText.replace("{num}", Utils.padNumber(numPadVideo[i], numStartVideo[i]));
+                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadVideo[i], numStartVideo[i]));
                     numStartVideo[i]++;
                 }
 
@@ -4401,7 +4483,7 @@ public class JMkvpropedit {
 
                 if (chbNumbAudio[i].isSelected() && chbEditAudio[i].isSelected()) {
                     tmpText = tmpText.replace("{num}", Utils.padNumber(numPadAudio[i], numStartAudio[i]));
-                    tmpText2 = tmpText.replace("{num}", Utils.padNumber(numPadAudio[i], numStartAudio[i]));
+                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadAudio[i], numStartAudio[i]));
                     numStartAudio[i]++;
                 }
 
@@ -4524,7 +4606,7 @@ public class JMkvpropedit {
 
                 if (chbNumbSubtitle[i].isSelected() && chbEditSubtitle[i].isSelected()) {
                     tmpText = tmpText.replace("{num}", Utils.padNumber(numPadSubtitle[i], numStartSubtitle[i]));
-                    tmpText2 = tmpText.replace("{num}", Utils.padNumber(numPadSubtitle[i], numStartSubtitle[i]));
+                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadSubtitle[i], numStartSubtitle[i]));
                     numStartSubtitle[i]++;
                 }
 
