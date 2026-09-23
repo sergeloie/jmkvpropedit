@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JComboBox;
@@ -17,7 +18,9 @@ import javax.swing.filechooser.FileFilter;
 /**
  * Framework-free verification harness for issue #4 (file filters: .webm
  * folder-scan mask, doubled setFileFilter in txt/xml dialogs, MIME combo
- * artifact and shared-list mutation).
+ * artifact and shared-list mutation) plus issue #8 (matroska mask on
+ * java.nio PathMatcher glob, case-insensitive extensions, Files.walk folder
+ * scan with recursion).
  *
  * <p>
  * The Gradle build files are out of scope for issue #4, so this harness is a
@@ -50,7 +53,7 @@ public final class FileFiltersChecks {
         // mutated during construction, so it must observe the pristine state.
         checkMimeCombosHaveNoArtifactAndStayConsistent();
 
-        checkWebmInMatroskaWildcardFilter();
+        checkMatroskaMaskAcceptsAllExtensions();
         checkFolderScanPicksUpWebm();
         checkTextFileChooserExposesBothFilters();
 
@@ -60,25 +63,36 @@ public final class FileFiltersChecks {
     }
 
     /**
-     * AC1: the folder-scan wildcard mask must accept *.webm, not only the
-     * literal name ".webm".
+     * Issue #8: the folder-scan mask must be a java.nio glob PathMatcher that
+     * accepts all five Matroska extensions (mkv/mka/mk3d/webm/mks)
+     * case-insensitively — replacing the commons-io WildcardFileFilter — and
+     * rejects everything else.
      */
-    private static void checkWebmInMatroskaWildcardFilter() throws Exception {
-        JMkvpropedit w = newWindow();
-        Object filter = get(w, "MATROSKA_FILE_FILTER");
+    private static void checkMatroskaMaskAcceptsAllExtensions() {
+        String[] accepted = {
+                "movie.mkv", "movie.MKV", "MOVIE.MkV",
+                "movie.mka", "movie.MKA",
+                "movie.mk3d", "movie.MK3D",
+                "movie.webm", "movie.WEBM",
+                "movie.mks", "movie.MKS",
+        };
+        String[] rejected = { "movie.txt", "movie", "movie.mkv.bak", "mkv" };
 
-        Method accept = filter.getClass().getMethod("accept", File.class);
-        boolean webm = (Boolean) accept.invoke(filter, new File("movie.webm"));
-        boolean mkv = (Boolean) accept.invoke(filter, new File("movie.mkv"));
-        boolean txt = (Boolean) accept.invoke(filter, new File("movie.txt"));
+        for (String name : accepted) {
+            check("matroska mask accepts " + name,
+                    JMkvpropedit.isMatroskaFile(Path.of(name)), "isMatroskaFile=false");
+        }
 
-        check("wildcard mask accepts movie.webm", webm, "accept=false");
-        check("wildcard mask still accepts movie.mkv", mkv, "accept=false");
-        check("wildcard mask still rejects movie.txt", !txt, "accept=true");
+        for (String name : rejected) {
+            check("matroska mask rejects " + name,
+                    !JMkvpropedit.isMatroskaFile(Path.of(name)), "isMatroskaFile=true");
+        }
     }
 
     /**
-     * AC1: addMkvFilesFromFolder must pick up .webm files next to .mkv.
+     * AC1 + issue #8: addMkvFilesFromFolder must pick up .webm files next to
+     * .mkv, match the mask case-insensitively (Files.walk scan) and recurse
+     * into subfolders like the old FileUtils.iterateFiles did.
      */
     private static void checkFolderScanPicksUpWebm() throws Exception {
         JMkvpropedit w = newWindow();
@@ -89,6 +103,13 @@ public final class FileFiltersChecks {
             touch(new File(folder, "a.mkv"));
             touch(new File(folder, "b.webm"));
             touch(new File(folder, "c.txt"));
+            touch(new File(folder, "UPPER.MKV"));
+
+            File subDir = new File(folder, "sub");
+            if (!subDir.mkdir()) {
+                check("create nested scan folder", false, "mkdir failed for " + subDir);
+            }
+            touch(new File(subDir, "nested.mka"));
 
             call(w, "addMkvFilesFromFolder", folder);
             // The scan is posted to the EDT via invokeLater; flush it.
@@ -105,10 +126,16 @@ public final class FileFiltersChecks {
             boolean hasMkv = picked.stream().anyMatch(p -> p.endsWith("a.mkv"));
             boolean hasWebm = picked.stream().anyMatch(p -> p.endsWith("b.webm"));
             boolean hasTxt = picked.stream().anyMatch(p -> p.endsWith("c.txt"));
+            boolean hasUpper = picked.stream()
+                    .anyMatch(p -> p.toLowerCase(Locale.ROOT).endsWith("upper.mkv"));
+            boolean hasNested = picked.stream()
+                    .anyMatch(p -> p.toLowerCase(Locale.ROOT).endsWith("nested.mka"));
 
             check("folder scan picks up .mkv", hasMkv, "picked=" + picked);
             check("folder scan picks up .webm", hasWebm, "picked=" + picked);
             check("folder scan ignores .txt", !hasTxt, "picked=" + picked);
+            check("folder scan picks up .MKV uppercase", hasUpper, "picked=" + picked);
+            check("folder scan recurses into subfolders", hasNested, "picked=" + picked);
         } finally {
             deleteRecursively(folder);
         }
