@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -103,7 +104,6 @@ public class JMkvpropedit {
     private Process proc = null;
     private ProcessBuilder pb = new ProcessBuilder();
     private SwingWorker<Void, Void> worker = null;
-    private boolean exeFound = true;
 
     private File iniFile = new File("JMkvpropedit.ini");
     private static final MkvStrings mkvStrings = new MkvStrings();
@@ -4842,34 +4842,33 @@ public class JMkvpropedit {
     }
 
     private boolean isExecutableInPath(final String exe) {
-        worker = new SwingWorker<Void, Void>() {
-            @Override
-            public Void doInBackground() {
-                try {
-                    pb.command(exe);
-                    pb.redirectErrorStream(true);
-                    proc = pb.start();
+        ProcessBuilder pb = new ProcessBuilder(exe);
+        pb.redirectErrorStream(true);
 
-                    BufferedReader in = new BufferedReader(new InputStreamReader(proc.getInputStream()));
-                    proc.waitFor();
-                    in.close();
+        try {
+            Process proc = pb.start();
 
-                    exeFound = true;
-                } catch (IOException e) {
-                    exeFound = false;
-                } catch (InterruptedException e) {
-                    exeFound = false;
+            // Drain the merged output as explicit UTF-8 before waiting: reading
+            // until EOF proves the child has finished and can never block it on
+            // a full pipe (the old waitFor-before-read order could deadlock).
+            // No SwingWorker here: the probe never touches Swing, so there is
+            // nothing to marshal — and an isDone busy-wait would only spin the
+            // EDT.
+            try (BufferedReader in = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+                while (in.readLine() != null) {
+                    // discard the probe output
                 }
-
-                return null;
             }
-        };
 
-        worker.execute();
-        while (!worker.isDone()) {
+            proc.waitFor();
+            return true;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
-
-        return exeFound;
     }
 
     /* End of command line methods */
