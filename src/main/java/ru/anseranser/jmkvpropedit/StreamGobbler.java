@@ -29,8 +29,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 
 /*
  * Original code by Michael C. Daconta
@@ -47,19 +49,31 @@ public class StreamGobbler extends Thread {
         this.text = text;
     }
 
+    @Override
     public void run() {
-        try {
-            InputStreamReader isr = new InputStreamReader(is);
-            BufferedReader br = new BufferedReader(isr);
+        // Decode the process output as explicit UTF-8 instead of the platform
+        // default charset; try-with-resources closes the stream so the thread
+        // finishes as soon as the process hits EOF.
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
 
             while ((line = br.readLine()) != null) {
-                text.append(line + "\n"); // JTextArea.append is thread safe
-                text.setCaretPosition(text.getText().length()); // Autoscroll
+                appendToLog(line + "\n");
             }
         } catch (IOException e) {
-            text.append(e.toString());
+            appendToLog(e.toString());
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Marshals the append to the EDT: this reader runs on its own thread and
+     * must never touch the JTextArea directly.
+     */
+    private void appendToLog(final String s) {
+        SwingUtilities.invokeLater(() -> {
+            text.append(s);
+            text.setCaretPosition(text.getDocument().getLength()); // Autoscroll
+        });
     }
 }
