@@ -1,7 +1,5 @@
 plugins {
     application
-    id("org.graalvm.buildtools.native") version "1.1.14"
-    id("edu.sc.seis.launch4j") version "4.0.0"
 }
 
 java {
@@ -62,20 +60,64 @@ dependencies {
     implementation("org.ini4j:ini4j:0.5.4")
 }
 
-graalvmNative {
-    binaries {
-        named("main") {
-            javaLauncher.set(javaToolchains.launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(21))
-                vendor.set(JvmVendorSpec.GRAAL_VM)
-            })
-            imageName.set("jmkvpropedit")
-            useFatJar.set(true)
-        }
-    }
-}
+// ---------------------------------------------------------------------------
+// Packaging (#10): self-contained installer via the JDK 21 jpackage tool.
+//
+// Opt-in on purpose: this task is NOT wired into `build`/`check`, so plain
+// `gradlew build` (and the Linux CI) never needs jpackage or WiX.
+//   .\gradlew.bat jpackage                          -> exe installer (needs WiX 3)
+//   .\gradlew.bat jpackage -PjpackageType=msi       -> msi installer (needs WiX 3)
+//   .\gradlew.bat jpackage -PjpackageType=app-image -> portable app image (no WiX)
+//
+// Input is the application plugin's installDist layout (app jar + dependency
+// jars); jpackage puts every input jar on the launcher classpath and bundles
+// a Java 21 runtime, so the installed app runs without system Java.
+// Output lands in build/jpackage/.
+// ---------------------------------------------------------------------------
+tasks.register<Exec>("jpackage") {
+    group = "distribution"
+    description = "Builds a self-contained Windows installer (exe/msi) with a bundled Java 21 runtime. " +
+        "Opt-in, not part of 'build'. Needs WiX 3 for exe/msi; use -PjpackageType=app-image without it."
 
-launch4j {
-    mainClassName = "ru.anseranser.jmkvpropedit.JMkvpropedit"
-    outfile = "jmkvpropedit.exe"
+    val jpackageType = providers.gradleProperty("jpackageType").orElse("exe").get()
+    val inputDir = layout.buildDirectory.dir("install/jmkvpropedit/lib").get().asFile
+    val destDir = layout.buildDirectory.dir("jpackage").get().asFile
+    val isWindows = System.getProperty("os.name").startsWith("Windows")
+    val jpackageBin = File(
+        javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }.get().metadata.installationPath.asFile,
+        if (isWindows) "bin/jpackage.exe" else "bin/jpackage"
+    )
+
+    dependsOn("installDist")
+    executable = jpackageBin.absolutePath
+
+    val jpackageArgs = mutableListOf(
+        "--type", jpackageType,
+        "--name", "jmkvpropedit",
+        "--app-version", appVersion,
+        "--vendor", "BrunoReX",
+        "--description", "Batch GUI for mkvpropedit",
+        "--input", inputDir.absolutePath,
+        "--main-jar", "jmkvpropedit-$appVersion.jar",
+        "--main-class", application.mainClass.get(),
+        "--dest", destDir.absolutePath
+    )
+
+    // Shortcut/menu/dir-chooser options only apply to exe/msi, not app-image.
+    if (jpackageType != "app-image") {
+        jpackageArgs += listOf("--win-dir-chooser", "--win-shortcut", "--win-menu")
+    }
+
+    args(jpackageArgs)
+
+    doFirst {
+        if (!jpackageBin.isFile) {
+            throw GradleException(
+                "jpackage not found at $jpackageBin — a full JDK 21 installation is required"
+            )
+        }
+        destDir.mkdirs()
+    }
 }
