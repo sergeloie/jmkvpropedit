@@ -128,7 +128,7 @@ public class JMkvpropedit {
         }
     };
 
-    private FileFilter EXE_EXT_FILTER = new FileNameExtensionFilter("Excecutable files (*.exe)", "exe");
+    private FileFilter EXE_EXT_FILTER = new FileNameExtensionFilter("Executable files (*.exe)", "exe");
 
     private FileFilter MATROSKA_EXT_FILTER = new FileNameExtensionFilter(
             "Matroska files (*.mkv; *.mka; *.mk3d; *.webm; *.mks)", "mkv", "mka", "mk3d", "webm", "mks");
@@ -1682,6 +1682,7 @@ public class JMkvpropedit {
                                 modelFiles.add(modelFiles.getSize(), files[i].getCanonicalPath());
                             }
                         } catch (IOException e1) {
+                            appendOutput("Error: could not resolve " + files[i] + ": " + e1 + "\n");
                         }
                     }
                 }
@@ -2078,8 +2079,6 @@ public class JMkvpropedit {
                 if (cbVideo.getItemCount() == 1) {
                     btnRemoveVideo.setEnabled(false);
                 }
-
-                System.gc();
             }
         });
 
@@ -2137,8 +2136,6 @@ public class JMkvpropedit {
                 if (cbAudio.getItemCount() == 1) {
                     btnRemoveAudio.setEnabled(false);
                 }
-
-                System.gc();
             }
         });
 
@@ -2197,8 +2194,6 @@ public class JMkvpropedit {
                 if (cbSubtitle.getItemCount() == 1) {
                     btnRemoveSubtitle.setEnabled(false);
                 }
-
-                System.gc();
             }
         });
 
@@ -2209,6 +2204,7 @@ public class JMkvpropedit {
                         txtAttachAddFile.setText(files[0].getCanonicalPath());
                     }
                 } catch (IOException e) {
+                    appendOutput("Error: could not resolve dropped attachment: " + e + "\n");
                 }
             }
         });
@@ -2413,6 +2409,7 @@ public class JMkvpropedit {
                         txtAttachReplaceNew.setText(files[0].getCanonicalPath());
                     }
                 } catch (IOException e) {
+                    appendOutput("Error: could not resolve dropped attachment: " + e + "\n");
                 }
             }
         });
@@ -4923,6 +4920,7 @@ public class JMkvpropedit {
                         addFile(file, true);
                     }
                 } catch (Exception e) {
+                    appendOutput("Error: could not add " + arg + ": " + e + "\n");
                 }
             }
         }
@@ -4981,12 +4979,12 @@ public class JMkvpropedit {
                     }
                 }
             } catch (InvalidFileFormatException e) {
-
+                appendOutput("Error: malformed " + iniFile.getName() + ": " + e + "\n");
             } catch (IOException e) {
-
+                appendOutput("Error: could not read " + iniFile.getName() + ": " + e + "\n");
             }
         } else if (Utils.isWindows()) {
-            String exePath = getMkvPropExeDefaullt();
+            String exePath = getMkvPropExeDefault();
 
             if (exePath != null) {
                 txtMkvPropExe.setText(exePath);
@@ -5013,7 +5011,9 @@ public class JMkvpropedit {
             ini.put("General", "mkvpropedit", exeFile.toString());
             ini.store();
         } catch (InvalidFileFormatException e1) {
+            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
         } catch (IOException e1) {
+            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
         }
     }
 
@@ -5031,11 +5031,13 @@ public class JMkvpropedit {
 
             ini.store();
         } catch (InvalidFileFormatException e1) {
+            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
         } catch (IOException e1) {
+            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
         }
     }
 
-    private String getMkvPropExeDefaullt() {
+    private String getMkvPropExeDefault() {
         String sysDrive = System.getenv("SystemDrive");
         String exePaths[] = new String[] { sysDrive + "\\Program Files (x86)\\MKVToolNix",
                 sysDrive + "\\Program Files\\MKVToolNix" };
@@ -5073,7 +5075,7 @@ public class JMkvpropedit {
             // Set minimum size for column
             columnModel.getColumn(i).setMinWidth(colWidths[i]);
 
-            // Set prefered size for column
+            // Set preferred size for column
             columnModel.getColumn(i).setPreferredWidth(colWidths[i]);
         }
 
@@ -5144,6 +5146,7 @@ public class JMkvpropedit {
                 modelFiles.add(modelFiles.getSize(), file.getCanonicalPath());
             }
         } catch (IOException e) {
+            appendOutput("Error: could not resolve " + file + ": " + e + "\n");
         }
     }
 

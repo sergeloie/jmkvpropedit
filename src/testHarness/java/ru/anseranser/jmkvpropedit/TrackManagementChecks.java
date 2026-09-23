@@ -27,7 +27,7 @@ import javax.swing.JTextField;
  * <pre>
  * javac -cp "build/classes/java/main" -d build/testHarness ^
  *       src/testHarness/java/ru/anseranser/jmkvpropedit/TrackManagementChecks.java
- * java -cp "build/classes/java/main;build/testHarness;build/resources/main;lib/commons-io/commons-io-2.11.0.jar;lib/ini4j/ini4j-0.5.4.jar" ^
+ * java -cp "build/classes/java/main;build/testHarness;build/resources/main;build/install/jmkvpropedit/lib/*" ^
  *      ru.anseranser.jmkvpropedit.TrackManagementChecks
  * </pre>
  *
