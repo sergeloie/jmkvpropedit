@@ -131,7 +131,7 @@ public class Utils {
             cutMenuItem.setEnabled(false);
         }
 
-        if ((selStart + selEnd) == text.getText().length()) {
+        if (selStart == 0 && selEnd == text.getText().length()) {
             selectAllMenuItem.setEnabled(false);
         }
 
@@ -147,7 +147,15 @@ public class Utils {
         text.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                if (e.isMetaDown() && text.isEnabled()) {
+                if ((e.isPopupTrigger() || e.isMetaDown()) && text.isEnabled()) {
+                    text.requestFocus();
+                    showRCMenu(text, e);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger() && text.isEnabled()) {
                     text.requestFocus();
                     showRCMenu(text, e);
                 }
