@@ -58,6 +58,16 @@ tasks.withType<JavaCompile> {
 
 dependencies {
     implementation("org.ini4j:ini4j:0.5.4")
+
+    // Unit tests (issue #11): JUnit 5 for src/test — the src/testHarness
+    // programs stay framework-free and outside Gradle source sets.
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 // ---------------------------------------------------------------------------
