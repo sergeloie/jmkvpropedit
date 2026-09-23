@@ -5,5 +5,7 @@
 .idea
 .gradle
 /plans/
+/lib/
+*.iml
 JMkvpropedit.ini
 options.json

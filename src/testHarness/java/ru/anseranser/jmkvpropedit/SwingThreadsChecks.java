@@ -38,7 +38,7 @@ import javax.swing.SwingWorker;
  * <pre>
  * javac -encoding UTF-8 -cp "build/classes/java/main" -d build/testHarness ^
  *       src/testHarness/java/ru/anseranser/jmkvpropedit/SwingThreadsChecks.java
- * java -Dfile.encoding=ISO-8859-1 -cp "build/classes/java/main;build/testHarness;build/resources/main;lib/commons-io/commons-io-2.11.0.jar;lib/ini4j/ini4j-0.5.4.jar" ^
+ * java -Dfile.encoding=ISO-8859-1 -cp "build/classes/java/main;build/testHarness;build/resources/main;build/install/jmkvpropedit/lib/*" ^
  *      ru.anseranser.jmkvpropedit.SwingThreadsChecks
  * </pre>
  *
