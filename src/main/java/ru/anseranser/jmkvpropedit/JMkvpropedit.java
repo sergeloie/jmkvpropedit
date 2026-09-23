@@ -202,7 +202,7 @@ public class JMkvpropedit {
     private String cmdLineAttachmentsDeleteOpt = null;
 
     private List<String> cmdLineBatch = null;
-    private List<String> cmdLineBatchOpt = null;
+    private List<String[]> cmdLineBatchOpt = null;
 
     // Window controls
     private Dimension frmJMkvpropeditDim = new Dimension(0, 0);
@@ -4712,7 +4712,7 @@ public class JMkvpropedit {
         setCmdLineAttachmentsDelete();
 
         cmdLineBatch = new ArrayList<String>();
-        cmdLineBatchOpt = new ArrayList<String>();
+        cmdLineBatchOpt = new ArrayList<String[]>();
 
         String cmdTemp = cmdLineGeneral[0] + cmdLineAttachmentsDelete + cmdLineAttachmentsAdd
                 + cmdLineAttachmentsReplace + cmdLineVideo[0] + cmdLineAudio[0] + cmdLineSubtitle[0];
@@ -4728,12 +4728,14 @@ public class JMkvpropedit {
 
                 if (Utils.isWindows()) {
                     cmdLineBatch.add("\"" + txtMkvPropExe.getText() + "\" \"" + modelFiles.get(i) + "\"" + cmdLineAll);
-                    cmdLineBatchOpt.add("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt);
+                    cmdLineBatchOpt.add(
+                            toOptArgs("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt));
                 } else {
                     cmdLineBatch.add("\"" + Utils.escapeQuotes(txtMkvPropExe.getText()) + "\" " + "\""
                             + Utils.escapeQuotes((String) modelFiles.get(i)) + "\"" + cmdLineAll);
 
-                    cmdLineBatchOpt.add("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt);
+                    cmdLineBatchOpt.add(
+                            toOptArgs("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt));
                 }
             }
         }
@@ -4754,7 +4756,7 @@ public class JMkvpropedit {
         // batch runs.
         final JTextArea output = txtOutput;
         final List<String> batch = List.copyOf(cmdLineBatch);
-        final List<String> batchOpt = List.copyOf(cmdLineBatchOpt);
+        final List<String[]> batchOpt = List.copyOf(cmdLineBatchOpt);
         final List<String> fileNames = new ArrayList<>();
         for (int i = 0; i < modelFiles.getSize(); i++) {
             fileNames.add(modelFiles.get(i));
@@ -4769,29 +4771,9 @@ public class JMkvpropedit {
 
                     try {
                         File optFile = new File("options.json");
-                        PrintWriter optFilePW = new PrintWriter(optFile, "UTF-8");
-                        String[] optFileContents = Commandline.translateCommandline(batchOpt.get(i));
-                        int optFileMaxLines = optFileContents.length - 1;
-
-                        if (!optFile.exists()) {
-                            optFile.createNewFile();
+                        try (PrintWriter optFilePW = new PrintWriter(optFile, "UTF-8")) {
+                            optFilePW.print(optionsJson(batchOpt.get(i)));
                         }
-
-                        optFilePW.println("[");
-                        int curLine = 0;
-                        for (String content : optFileContents) {
-                            content = Utils.fixEscapedQuotes(content);
-
-                            optFilePW.print("  \"" + content + "\"");
-                            if (curLine != optFileMaxLines)
-                                optFilePW.print(",");
-                            optFilePW.println();
-                            curLine++;
-                        }
-                        optFilePW.println("]");
-
-                        optFilePW.flush();
-                        optFilePW.close();
 
                         ProcessBuilder pb = new ProcessBuilder(exePath, "@options.json");
                         pb.redirectErrorStream(true);
@@ -4838,6 +4820,78 @@ public class JMkvpropedit {
         };
 
         worker.execute();
+    }
+
+    /**
+     * Cracks an Opt command line into the argument list for options.json.
+     *
+     * <p>
+     * The Opt strings still carry {@link Utils#escapeName}'s encoding (quote
+     * placeholder + doubled backslashes, frozen by issue #3). It is unwound
+     * exactly once here, at the boundary where the string form becomes
+     * structured arguments; JSON escaping itself (see {@link #optionsJson})
+     * is placeholder-free.
+     * </p>
+     */
+    static String[] toOptArgs(String optCommandLine) {
+        String[] args = Commandline.translateCommandline(optCommandLine);
+        for (int i = 0; i < args.length; i++) {
+            args[i] = decodeOptEscaping(args[i]);
+        }
+        return args;
+    }
+
+    /**
+     * Builds the contents of options.json: the arguments as a JSON array of
+     * properly escaped strings (issue #6).
+     */
+    static String optionsJson(String[] args) {
+        StringBuilder json = new StringBuilder("[\n");
+        for (int i = 0; i < args.length; i++) {
+            json.append("  ").append(jsonString(args[i]));
+            if (i < args.length - 1) {
+                json.append(',');
+            }
+            json.append('\n');
+        }
+        return json.append("]\n").toString();
+    }
+
+    /**
+     * Unwinds {@link Utils#escapeName}'s quote placeholder and doubled
+     * backslashes, so the original data can be JSON-escaped from scratch.
+     */
+    private static String decodeOptEscaping(String token) {
+        return token.replace("####escaped__quotes#####", "\"").replace("\\\\", "\\");
+    }
+
+    /**
+     * Minimal JSON string writer: escapes the quote, backslash and control
+     * characters; everything else (including unicode) is valid UTF-8 JSON as-is.
+     */
+    private static String jsonString(String raw) {
+        StringBuilder sb = new StringBuilder(raw.length() + 16);
+        sb.append('"');
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            switch (c) {
+            case '"' -> sb.append("\\\"");
+            case '\\' -> sb.append("\\\\");
+            case '\b' -> sb.append("\\b");
+            case '\f' -> sb.append("\\f");
+            case '\n' -> sb.append("\\n");
+            case '\r' -> sb.append("\\r");
+            case '\t' -> sb.append("\\t");
+            default -> {
+                if (c < 0x20) {
+                    sb.append(String.format("\\u%04x", (int) c));
+                } else {
+                    sb.append(c);
+                }
+            }
+            }
+        }
+        return sb.append('"').toString();
     }
 
     /**
