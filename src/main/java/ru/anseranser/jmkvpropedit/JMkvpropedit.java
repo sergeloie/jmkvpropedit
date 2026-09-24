@@ -49,14 +49,9 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Stream;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -121,15 +116,6 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private FileFilter MATROSKA_EXT_FILTER = new FileNameExtensionFilter(
             "Matroska files (*.mkv; *.mka; *.mk3d; *.webm; *.mks)", "mkv", "mka", "mk3d", "webm", "mks");
-
-    /**
-     * Folder-scan glob for Matroska files: mkv/mka/mk3d/webm/mks. The glob
-     * itself is lowercase; {@link #isMatroskaFile} lowercases the file name
-     * before matching so the mask stays case-insensitive on case-sensitive
-     * filesystems (Linux/CI) as well as on Windows.
-     */
-    private static final PathMatcher MATROSKA_FILE_FILTER =
-            FileSystems.getDefault().getPathMatcher("glob:*.{mkv,mka,mk3d,webm,mks}");
 
     private FileFilter TXT_EXT_FILTER = new FileNameExtensionFilter("Plain text files (*.txt)", "txt");
 
@@ -1613,44 +1599,16 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         }
     }
 
-    /**
-     * Folder-scan mask for Matroska files, case-insensitive: mkv, mka, mk3d,
-     * webm, mks (replaces the commons-io {@code WildcardFileFilter}).
-     *
-     * @param path file to test; only the file name is matched
-     * @return true when the file name ends with a Matroska extension
-     */
-    static boolean isMatroskaFile(final Path path) {
-        final Path name = path.getFileName();
-
-        if (name == null) {
-            return false;
-        }
-
-        // Lowercase both sides: the glob is fixed lowercase, and normalizing
-        // the name makes *.mkv match *.MKV regardless of the filesystem's
-        // own case sensitivity.
-        return MATROSKA_FILE_FILTER.matches(
-                Path.of(name.toString().toLowerCase(Locale.ROOT)));
-    }
-
     private void addMkvFilesFromFolder(final File folder) {
-        Runnable tmpWorker = new Runnable() {
-            @Override
-            public void run() {
-                // Recursive scan, same as FileUtils.iterateFiles with
-                // TrueFileFilter dir filter; mask applies to file names only.
-                try (Stream<Path> walk = Files.walk(folder.toPath())) {
-                    walk.filter(Files::isRegularFile)
-                            .filter(JMkvpropedit::isMatroskaFile)
-                            .forEach(path -> addFile(path.toFile(), false));
-                } catch (IOException | UncheckedIOException e) {
-                    appendOutput("Error: could not scan " + folder + ": " + e + "\n");
+        SwingUtilities.invokeLater(() -> {
+            try {
+                for (Path path : FileScanner.scanMatroskaFiles(folder.toPath())) {
+                    addFile(path.toFile(), false);
                 }
+            } catch (IOException | UncheckedIOException e) {
+                appendOutput("Error: could not scan " + folder + ": " + e + "\n");
             }
-        };
-
-        SwingUtilities.invokeLater(tmpWorker);
+        });
     }
 
     /* End of file methods */
