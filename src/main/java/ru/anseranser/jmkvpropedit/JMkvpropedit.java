@@ -42,13 +42,9 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -1279,7 +1275,6 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         // Snapshot the inputs so the worker only reads plain data: disabling
         // the tab pane does not stop the file list from being edited while the
         // batch runs.
-        final JTextArea output = txtOutput;
         final List<String> batch = List.copyOf(cmdLineBatch);
         final List<String[]> batchOpt = List.copyOf(cmdLineBatchOpt);
         final List<String> fileNames = new ArrayList<>();
@@ -1291,33 +1286,15 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         worker = new SwingWorker<Void, Void>() {
             @Override
             public Void doInBackground() {
+                ProcessRunner runner = new ProcessRunner(exePath);
+
                 for (int i = 0; i < batch.size(); i++) {
-                    Process proc = null;
-
                     try {
-                        File optFile = new File("options.json");
-                        try (PrintWriter optFilePW = new PrintWriter(optFile, "UTF-8")) {
-                            optFilePW.print(optionsJson(batchOpt.get(i)));
-                        }
-
-                        ProcessBuilder pb = new ProcessBuilder(exePath, "@options.json");
-                        pb.redirectErrorStream(true);
-
                         appendOutput("File: " + fileNames.get(i) + "\n");
                         appendOutput("Command line: " + batch.get(i) + "\n\n");
 
-                        proc = pb.start();
-
-                        StreamGobbler outputGobbler = new StreamGobbler(proc.getInputStream(), output);
-                        outputGobbler.start();
-
-                        proc.waitFor();
-                        // The reader stops at EOF; joining it guarantees the
-                        // whole process output reaches the log before the next
-                        // separator (replaces the old fixed sleep).
-                        outputGobbler.join();
-
-                        optFile.delete();
+                        runner.runWithOptionsFile(optionsJson(batchOpt.get(i)),
+                                JMkvpropedit.this::appendOutput);
 
                         if (i < batch.size() - 1) {
                             appendOutput("--------------\n\n");
@@ -1325,9 +1302,6 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                     } catch (IOException e) {
                         appendOutput("Error: " + e + "\n");
                     } catch (InterruptedException e) {
-                        if (proc != null) {
-                            proc.destroy();
-                        }
                         Thread.currentThread().interrupt();
                         break;
                     }
@@ -1460,33 +1434,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     }
 
     private boolean isExecutableInPath(final String exe) {
-        ProcessBuilder pb = new ProcessBuilder(exe);
-        pb.redirectErrorStream(true);
-
-        try {
-            Process proc = pb.start();
-
-            // Drain the merged output as explicit UTF-8 before waiting: reading
-            // until EOF proves the child has finished and can never block it on
-            // a full pipe (the old waitFor-before-read order could deadlock).
-            // No SwingWorker here: the probe never touches Swing, so there is
-            // nothing to marshal — and an isDone busy-wait would only spin the
-            // EDT.
-            try (BufferedReader in = new BufferedReader(
-                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-                while (in.readLine() != null) {
-                    // discard the probe output
-                }
-            }
-
-            proc.waitFor();
-            return true;
-        } catch (IOException e) {
-            return false;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
+        return new ProcessRunner(exe).isExecutableInPath();
     }
 
     /* End of command line methods */
