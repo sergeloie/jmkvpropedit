@@ -113,14 +113,18 @@ public final class OptionsJsonChecks {
      */
     private static void checkEndToEndPathNameAndTitle() throws Exception {
         JMkvpropedit w = newWindow();
-        call(w, "addVideoTrack");
+        Field videoPanelField = JMkvpropedit.class.getDeclaredField("videoPanel");
+        videoPanelField.setAccessible(true);
+        TrackPanel videoPanel = (TrackPanel) videoPanelField.get(w);
+        videoPanel.addTrack();
+        TrackSlot slot = videoPanel.slots().get(0);
 
-        ((JCheckBox) atIndex(w, "chbEditVideo", 0)).setSelected(true);
-        ((JCheckBox) atIndex(w, "chbNameVideo", 0)).setSelected(true);
-        ((JCheckBox) atIndex(w, "chbNumbVideo", 0)).setSelected(true);
-        ((JTextField) atIndex(w, "txtNameVideo", 0)).setText("A\"B\\{num}");
-        ((JTextField) atIndex(w, "txtNumbStartVideo", 0)).setText("7");
-        ((JTextField) atIndex(w, "txtNumbPadVideo", 0)).setText("2");
+        slot.chbEdit.setSelected(true);
+        slot.chbName.setSelected(true);
+        slot.chbNumb.setSelected(true);
+        slot.txtName.setText("A\"B\\{num}");
+        slot.txtNumbStart.setText("7");
+        slot.txtNumbPad.setText("2");
 
         ((JCheckBox) get(w, "chbTitleGeneral")).setSelected(true);
         ((JTextField) get(w, "txtTitleGeneral")).setText("Юникод \"кавычки\" \\ конец");
@@ -286,10 +290,6 @@ public final class OptionsJsonChecks {
         Field field = JMkvpropedit.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.get(target);
-    }
-
-    private static Object atIndex(Object target, String arrayName, int index) throws Exception {
-        return java.lang.reflect.Array.get(get(target, arrayName), index);
     }
 
     private static void setStatic(String name, Object value) throws Exception {
