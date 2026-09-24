@@ -75,18 +75,26 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+/**
+ * The application window: UI shell only — frame, tabs, listener wiring and
+ * calls into the extracted modules ({@link CommandBuilder}, {@link TrackPanel},
+ * {@link AttachmentPanel}, {@link ProcessRunner}, {@link IniStore},
+ * {@link FileScanner}). Issue #16 collapses the former god class down to this
+ * wiring; settings-to-arguments, process IO, INI IO and folder scans live in
+ * the modules, not here.
+ */
 public class JMkvpropedit implements AttachmentPanel.Host {
 
     private static final String VERSION_NUMBER = BuildVersion.VERSION;
     private static String[] argsArray;
 
-    private SwingWorker<Void, Void> worker = null;
+    private SwingWorker<Void, Void> worker;
 
     private final IniStore iniStore = new IniStore(new File("JMkvpropedit.ini"));
     private static final MkvStrings mkvStrings = new MkvStrings();
     private final CommandBuilder commandBuilder = new CommandBuilder();
 
-    private JFileChooser chooser = new JFileChooser(System.getProperty("user.home")) {
+    private final JFileChooser chooser = new JFileChooser(System.getProperty("user.home")) {
         private static final long serialVersionUID = 1L;
 
         @Override
@@ -108,29 +116,29 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         }
     };
 
-    private FileFilter EXE_EXT_FILTER = new FileNameExtensionFilter("Executable files (*.exe)", "exe");
+    private final FileFilter EXE_EXT_FILTER = new FileNameExtensionFilter("Executable files (*.exe)", "exe");
 
-    private FileFilter MATROSKA_EXT_FILTER = new FileNameExtensionFilter(
+    private final FileFilter MATROSKA_EXT_FILTER = new FileNameExtensionFilter(
             "Matroska files (*.mkv; *.mka; *.mk3d; *.webm; *.mks)", "mkv", "mka", "mk3d", "webm", "mks");
 
-    private FileFilter TXT_EXT_FILTER = new FileNameExtensionFilter("Plain text files (*.txt)", "txt");
+    private final FileFilter TXT_EXT_FILTER = new FileNameExtensionFilter("Plain text files (*.txt)", "txt");
 
-    private FileFilter XML_EXT_FILTER = new FileNameExtensionFilter("XML files (*.xml)", "xml");
+    private final FileFilter XML_EXT_FILTER = new FileNameExtensionFilter("XML files (*.xml)", "xml");
 
-    private String[] cmdLineGeneral = null;
-    private String[] cmdLineGeneralOpt = null;
+    private String[] cmdLineGeneral;
+    private String[] cmdLineGeneralOpt;
 
-    private String[] cmdLineVideo = null;
-    private String[] cmdLineVideoOpt = null;
+    private String[] cmdLineVideo;
+    private String[] cmdLineVideoOpt;
 
-    private String[] cmdLineAudio = null;
-    private String[] cmdLineAudioOpt = null;
+    private String[] cmdLineAudio;
+    private String[] cmdLineAudioOpt;
 
-    private String[] cmdLineSubtitle = null;
-    private String[] cmdLineSubtitleOpt = null;
+    private String[] cmdLineSubtitle;
+    private String[] cmdLineSubtitleOpt;
 
-    private List<String> cmdLineBatch = null;
-    private List<String[]> cmdLineBatchOpt = null;
+    private List<String> cmdLineBatch;
+    private List<String[]> cmdLineBatchOpt;
 
     // Window controls
     private Dimension frmJMkvpropeditDim = new Dimension(0, 0);
@@ -188,6 +196,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     private JPanel pnlOptions;
     private JTextField txtMkvPropExe;
     private JCheckBox chbMkvPropExeDef;
+    private JButton btnBrowseMkvPropExe;
 
     // Output tab controls
     private JTextArea txtOutput;
@@ -219,7 +228,8 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     }
 
     /**
-     * Initialize the contents of the frame.
+     * Initialize the contents of the frame: build every tab, then wire the
+     * listeners. No module logic runs here — only construction and wiring.
      */
     private void initialize() {
         frmJMkvpropedit = new JFrame();
@@ -234,6 +244,26 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         pnlTabs.setBorder(new EmptyBorder(10, 10, 0, 10));
         frmJMkvpropedit.getContentPane().add(pnlTabs, BorderLayout.CENTER);
 
+        buildInputTab();
+        buildGeneralTab();
+        buildTrackTabs();
+        buildAttachmentsTab();
+        buildOptionsTab();
+        buildOutputTab();
+        buildBottomButtons();
+
+        wireRightClickMenus();
+        wireWindowListeners();
+        wireFileDrop();
+        wireFileListToolbar();
+        wireGeneralTab();
+        wireExecutableOptions();
+        wireActionButtons();
+    }
+
+    /* Tab construction */
+
+    private void buildInputTab() {
         JPanel pnlInput = new JPanel();
         pnlInput.setBorder(new EmptyBorder(10, 10, 10, 0));
         pnlTabs.addTab("Input", null, pnlInput, null);
@@ -252,107 +282,39 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         pnlInput.add(pnlListToolbar, BorderLayout.EAST);
         pnlListToolbar.setLayout(new BoxLayout(pnlListToolbar, BoxLayout.Y_AXIS));
 
-        btnAddFiles = new JButton("");
-        btnAddFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/list-add.png")));
-        btnAddFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnAddFiles.setBorderPainted(false);
-        btnAddFiles.setContentAreaFilled(false);
-        btnAddFiles.setFocusPainted(false);
-        btnAddFiles.setOpaque(false);
-        btnAddFiles.setToolTipText("Add files");
+        btnAddFiles = createIconButton("/list-add.png", "Add files");
         pnlListToolbar.add(btnAddFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut1 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut1);
-
-        btnAddFolder = new JButton("");
-        btnAddFolder.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/list-add-folder.png")));
-        btnAddFolder.setMargin(new Insets(0, 0, 0, 0));
-        btnAddFolder.setBorderPainted(false);
-        btnAddFolder.setContentAreaFilled(false);
-        btnAddFolder.setFocusPainted(false);
-        btnAddFolder.setOpaque(false);
-        btnAddFolder.setToolTipText("Add folder");
+        btnAddFolder = createIconButton("/list-add-folder.png", "Add folder");
         pnlListToolbar.add(btnAddFolder);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut1b = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut1b);
-
-        btnRemoveFiles = new JButton("");
-        btnRemoveFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/list-remove.png")));
-        btnRemoveFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnRemoveFiles.setBorderPainted(false);
-        btnRemoveFiles.setContentAreaFilled(false);
-        btnRemoveFiles.setFocusPainted(false);
-        btnRemoveFiles.setOpaque(false);
-        btnRemoveFiles.setToolTipText("Remove selected files");
+        btnRemoveFiles = createIconButton("/list-remove.png", "Remove selected files");
         pnlListToolbar.add(btnRemoveFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut2 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut2);
-
-        btnTopFiles = new JButton("");
-        btnTopFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/go-top.png")));
-        btnTopFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnTopFiles.setBorderPainted(false);
-        btnTopFiles.setContentAreaFilled(false);
-        btnTopFiles.setFocusPainted(false);
-        btnTopFiles.setOpaque(false);
-        btnTopFiles.setToolTipText("Move selected files to the top");
+        btnTopFiles = createIconButton("/go-top.png", "Move selected files to the top");
         pnlListToolbar.add(btnTopFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut3 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut3);
-
-        btnUpFiles = new JButton("");
-        btnUpFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/go-up.png")));
-        btnUpFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnUpFiles.setBorderPainted(false);
-        btnUpFiles.setContentAreaFilled(false);
-        btnUpFiles.setFocusPainted(false);
-        btnUpFiles.setOpaque(false);
-        btnUpFiles.setToolTipText("Move selected files up");
+        btnUpFiles = createIconButton("/go-up.png", "Move selected files up");
         pnlListToolbar.add(btnUpFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut4 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut4);
-
-        btnDownFiles = new JButton("");
-        btnDownFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/go-down.png")));
-        btnDownFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnDownFiles.setBorderPainted(false);
-        btnDownFiles.setContentAreaFilled(false);
-        btnDownFiles.setFocusPainted(false);
-        btnDownFiles.setOpaque(false);
-        btnDownFiles.setToolTipText("Move selected files down");
+        btnDownFiles = createIconButton("/go-down.png", "Move selected files down");
         pnlListToolbar.add(btnDownFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut5 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut5);
-
-        btnBottomFiles = new JButton("");
-        btnBottomFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/go-bottom.png")));
-        btnBottomFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnBottomFiles.setBorderPainted(false);
-        btnBottomFiles.setContentAreaFilled(false);
-        btnBottomFiles.setFocusPainted(false);
-        btnBottomFiles.setOpaque(false);
-        btnBottomFiles.setToolTipText("Move selected files to the bottom");
+        btnBottomFiles = createIconButton("/go-bottom.png", "Move selected files to the bottom");
         pnlListToolbar.add(btnBottomFiles);
+        pnlListToolbar.add(Box.createVerticalStrut(10));
 
-        Component verticalStrut6 = Box.createVerticalStrut(10);
-        pnlListToolbar.add(verticalStrut6);
-
-        btnClearFiles = new JButton("");
-        btnClearFiles.setIcon(new ImageIcon(JMkvpropedit.class.getResource("/edit-clear.png")));
-        btnClearFiles.setMargin(new Insets(0, 0, 0, 0));
-        btnClearFiles.setBorderPainted(false);
-        btnClearFiles.setContentAreaFilled(false);
-        btnClearFiles.setFocusPainted(false);
-        btnClearFiles.setOpaque(false);
-        btnClearFiles.setToolTipText("Clear file list");
+        btnClearFiles = createIconButton("/edit-clear.png", "Clear file list");
         pnlListToolbar.add(btnClearFiles);
+    }
 
+    private void buildGeneralTab() {
         JPanel pnlGeneral = new JPanel();
         pnlGeneral.setBorder(new EmptyBorder(10, 10, 10, 10));
         pnlTabs.addTab("General", null, pnlGeneral, null);
@@ -397,8 +359,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         chbNumbGeneral.setEnabled(false);
         pnlNumbControlsGeneral.add(chbNumbGeneral);
 
-        Component horizontalStrut1 = Box.createHorizontalStrut(10);
-        pnlNumbControlsGeneral.add(horizontalStrut1);
+        pnlNumbControlsGeneral.add(Box.createHorizontalStrut(10));
 
         lblNumbStartGeneral = new JLabel("Start");
         lblNumbStartGeneral.setEnabled(false);
@@ -410,8 +371,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         pnlNumbControlsGeneral.add(txtNumbStartGeneral);
         txtNumbStartGeneral.setColumns(10);
 
-        Component horizontalStrut2 = Box.createHorizontalStrut(5);
-        pnlNumbControlsGeneral.add(horizontalStrut2);
+        pnlNumbControlsGeneral.add(Box.createHorizontalStrut(5));
 
         lblNumbPadGeneral = new JLabel("Padding");
         lblNumbPadGeneral.setEnabled(false);
@@ -420,8 +380,8 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         txtNumbPadGeneral = new JTextField();
         txtNumbPadGeneral.setEnabled(false);
         txtNumbPadGeneral.setText("1");
-        txtNumbPadGeneral.setColumns(10);
         pnlNumbControlsGeneral.add(txtNumbPadGeneral);
+        txtNumbPadGeneral.setColumns(10);
 
         lblNumbExplainGeneral = new JLabel(
                 "      To use it, add {num} to the title (e.g. \"My Title {num}\"). Use {file_name} to use the file name as the title.");
@@ -453,12 +413,11 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         gbc_cbChapters.gridy = 3;
         pnlGeneral.add(cbChapters, gbc_cbChapters);
 
-        Component verticalStrut7 = Box.createVerticalStrut(35);
         GridBagConstraints gbc_verticalStrut7 = new GridBagConstraints();
         gbc_verticalStrut7.insets = new Insets(0, 0, 5, 5);
         gbc_verticalStrut7.gridx = 0;
         gbc_verticalStrut7.gridy = 4;
-        pnlGeneral.add(verticalStrut7, gbc_verticalStrut7);
+        pnlGeneral.add(Box.createVerticalStrut(35), gbc_verticalStrut7);
 
         JPanel pnlChapControlsGeneral = new JPanel();
         GridBagConstraints gbc_pnlChapControlsGeneral = new GridBagConstraints();
@@ -522,12 +481,11 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         gbc_cbTags.gridy = 5;
         pnlGeneral.add(cbTags, gbc_cbTags);
 
-        Component verticalStrut8 = Box.createVerticalStrut(35);
         GridBagConstraints gbc_verticalStrut8 = new GridBagConstraints();
         gbc_verticalStrut8.insets = new Insets(0, 0, 5, 5);
         gbc_verticalStrut8.gridx = 0;
         gbc_verticalStrut8.gridy = 6;
-        pnlGeneral.add(verticalStrut8, gbc_verticalStrut8);
+        pnlGeneral.add(Box.createVerticalStrut(35), gbc_verticalStrut8);
 
         JPanel pnlTagControlsGeneral = new JPanel();
         GridBagConstraints gbc_pnlTagControlsGeneral = new GridBagConstraints();
@@ -588,7 +546,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         gbc_txtExtraCmdGeneral.gridy = 7;
         pnlGeneral.add(txtExtraCmdGeneral, gbc_txtExtraCmdGeneral);
         txtExtraCmdGeneral.setColumns(10);
+    }
 
+    private void buildTrackTabs() {
         videoPanel = new TrackPanel(TrackType.VIDEO, mkvStrings);
         pnlTabs.addTab(TrackType.VIDEO.tabTitle(), null, videoPanel, null);
 
@@ -597,7 +557,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
         subtitlePanel = new TrackPanel(TrackType.SUBTITLE, mkvStrings);
         pnlTabs.addTab(TrackType.SUBTITLE.tabTitle(), null, subtitlePanel, null);
+    }
 
+    private void buildAttachmentsTab() {
         pnlAttachments = new JTabbedPane(JTabbedPane.TOP);
         pnlTabs.addTab("Attachments", null, pnlAttachments, null);
 
@@ -609,7 +571,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
         attachmentDeletePanel = new AttachmentPanel(AttachmentOperation.DELETE, mkvStrings, this);
         pnlAttachments.addTab(AttachmentOperation.DELETE.tabTitle(), null, attachmentDeletePanel, null);
+    }
 
+    private void buildOptionsTab() {
         pnlOptions = new JPanel();
         pnlOptions.setBorder(new EmptyBorder(10, 10, 10, 10));
         pnlTabs.addTab("Options", null, pnlOptions, null);
@@ -663,12 +627,14 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         gbc_checkBox.gridy = 0;
         pnlMkvPropExeControls.add(chbMkvPropExeDef, gbc_checkBox);
 
-        JButton btnBrowseMkvPropExe = new JButton("Browse...");
+        btnBrowseMkvPropExe = new JButton("Browse...");
         GridBagConstraints gbc_button = new GridBagConstraints();
         gbc_button.gridx = 1;
         gbc_button.gridy = 0;
         pnlMkvPropExeControls.add(btnBrowseMkvPropExe, gbc_button);
+    }
 
+    private void buildOutputTab() {
         JPanel pnlOutput = new JPanel();
         pnlOutput.setBorder(new EmptyBorder(10, 10, 10, 10));
         pnlTabs.addTab("Output", null, pnlOutput, null);
@@ -681,7 +647,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         txtOutput.setLineWrap(true);
         txtOutput.setEditable(false);
         spOutput.setViewportView(txtOutput);
+    }
 
+    private void buildBottomButtons() {
         JPanel pnlButtons = new JPanel();
         frmJMkvpropedit.getContentPane().add(pnlButtons, BorderLayout.SOUTH);
 
@@ -690,9 +658,23 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
         btnGenerateCmdLine = new JButton("Generate command line");
         pnlButtons.add(btnGenerateCmdLine);
+    }
 
-        /* Start of mouse events for right-click menu */
+    private static JButton createIconButton(String iconResource, String tooltip) {
+        JButton button = new JButton("");
+        button.setIcon(new ImageIcon(JMkvpropedit.class.getResource(iconResource)));
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setBorderPainted(false);
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setOpaque(false);
+        button.setToolTipText(tooltip);
+        return button;
+    }
 
+    /* Listener wiring */
+
+    private void wireRightClickMenus() {
         Utils.addRCMenuMouseListener(txtTitleGeneral);
         Utils.addRCMenuMouseListener(txtNumbStartGeneral);
         Utils.addRCMenuMouseListener(txtNumbPadGeneral);
@@ -701,15 +683,12 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         Utils.addRCMenuMouseListener(txtExtraCmdGeneral);
         Utils.addRCMenuMouseListener(txtMkvPropExe);
         Utils.addRCMenuMouseListener(txtOutput);
+    }
 
-        /* End of mouse events for right-click menu */
-
+    private void wireWindowListeners() {
         frmJMkvpropedit.addWindowListener(new WindowAdapter() {
             @Override
             public void windowOpened(WindowEvent e) {
-                // Resize the window to make sure the components fit
-                // frmJMkvpropedit.pack();
-
                 // Don't allow the window to be resized to a dimension smaller than the original
                 frmJMkvpropedit.setMinimumSize(new Dimension(frmJMkvpropedit.getWidth(), frmJMkvpropedit.getHeight()));
 
@@ -724,13 +703,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
             @Override
             public void windowClosing(WindowEvent e) {
-                boolean wRunning;
-
-                try {
-                    wRunning = !worker.isDone();
-                } catch (Exception e1) {
-                    wRunning = false;
-                }
+                boolean wRunning = worker != null && !worker.isDone();
 
                 if (wRunning) {
                     int choice = JOptionPane.showConfirmDialog(frmJMkvpropedit, "Do you really want to exit?", "",
@@ -761,7 +734,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                 frmJMkvpropeditDim = new Dimension(frmJMkvpropedit.getWidth(), frmJMkvpropedit.getHeight());
             }
         });
+    }
 
+    private void wireFileDrop() {
         new FileDrop(listFiles, new FileDrop.Listener() {
             public void filesDropped(File[] files) {
                 for (int i = 0; i < files.length; i++) {
@@ -773,7 +748,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                 }
             }
         });
+    }
 
+    private void wireFileListToolbar() {
         btnAddFiles.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 File[] files = null;
@@ -916,7 +893,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                 listFiles.setSelectedIndices(idx);
             }
         });
+    }
 
+    private void wireGeneralTab() {
         chbTitleGeneral.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 boolean state = txtTitleGeneral.isEnabled();
@@ -947,159 +926,13 @@ public class JMkvpropedit implements AttachmentPanel.Host {
             }
         });
 
-        txtNumbStartGeneral.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent e) {
-                try {
-                    if (Integer.parseInt(txtNumbStartGeneral.getText()) < 0) {
-                        txtNumbStartGeneral.setText("1");
-                    }
-                } catch (NumberFormatException e1) {
-                    txtNumbStartGeneral.setText("1");
-                }
-            }
-        });
+        clampNonNegativeNumber(txtNumbStartGeneral);
+        clampNonNegativeNumber(txtNumbPadGeneral);
 
-        txtNumbPadGeneral.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusLost(FocusEvent e) {
-                try {
-                    if (Integer.parseInt(txtNumbPadGeneral.getText()) < 0) {
-                        txtNumbPadGeneral.setText("1");
-                    }
-                } catch (NumberFormatException e1) {
-                    txtNumbPadGeneral.setText("1");
-                }
-            }
-        });
-
-        chbChapters.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                boolean state = cbChapters.isEnabled();
-                cbChapters.setEnabled(!state);
-
-                if (cbChapters.getSelectedIndex() == 1) {
-                    txtChapters.setEditable(false);
-                    txtChapters.setVisible(true);
-                    txtChapters.setEnabled(!state);
-                    btnBrowseChapters.setVisible(true);
-                    btnBrowseChapters.setEnabled(!state);
-                    cbExtChapters.setVisible(false);
-                } else if (cbChapters.getSelectedIndex() == 2) {
-                    txtChapters.setEditable(true);
-                    txtChapters.setVisible(true);
-                    txtChapters.setEnabled(!state);
-                    btnBrowseChapters.setVisible(false);
-                    btnBrowseChapters.setEnabled(!state);
-                    cbExtChapters.setVisible(true);
-                    cbExtChapters.setEnabled(!state);
-                } else if (!chbChapters.isSelected()) {
-                    txtChapters.setVisible(false);
-                    btnBrowseChapters.setVisible(false);
-                    cbExtChapters.setVisible(false);
-                }
-            }
-        });
-
-        cbChapters.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                if (cbChapters.getSelectedIndex() == 0) {
-                    txtChapters.setVisible(false);
-                    btnBrowseChapters.setVisible(false);
-                    cbExtChapters.setVisible(false);
-                } else if (cbChapters.getSelectedIndex() == 1) {
-                    txtChapters.setText("");
-                    txtChapters.setEditable(false);
-                    txtChapters.setVisible(true);
-                    btnBrowseChapters.setVisible(true);
-                    cbExtChapters.setVisible(false);
-                } else {
-                    txtChapters.setText("-chapters");
-                    txtChapters.setEditable(true);
-                    txtChapters.setVisible(true);
-                    btnBrowseChapters.setVisible(false);
-                    cbExtChapters.setVisible(true);
-                }
-            }
-        });
-
-        btnBrowseChapters.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                configureTextFileChooser(chooser, "Select chapters file");
-
-                int open = chooser.showOpenDialog(frmJMkvpropedit);
-
-                if (open == JFileChooser.APPROVE_OPTION) {
-                    if (chooser.getSelectedFile().exists()) {
-                        txtChapters.setText(chooser.getSelectedFile().toString());
-                    }
-                }
-            }
-        });
-
-        chbTags.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                boolean state = cbTags.isEnabled();
-                cbTags.setEnabled(!state);
-
-                if (cbTags.getSelectedIndex() == 1) {
-                    txtTags.setEditable(false);
-                    txtTags.setVisible(true);
-                    txtTags.setEnabled(!state);
-                    btnBrowseTags.setVisible(true);
-                    btnBrowseTags.setEnabled(!state);
-                    cbExtTags.setVisible(false);
-                } else if (cbTags.getSelectedIndex() == 2) {
-                    txtTags.setEditable(true);
-                    txtTags.setVisible(true);
-                    txtTags.setEnabled(!state);
-                    btnBrowseTags.setVisible(false);
-                    btnBrowseTags.setEnabled(!state);
-                    cbExtTags.setVisible(true);
-                    cbExtTags.setEnabled(!state);
-                } else if (!chbTags.isSelected()) {
-                    txtTags.setVisible(false);
-                    btnBrowseTags.setVisible(false);
-                    cbExtTags.setVisible(false);
-                }
-            }
-        });
-
-        cbTags.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                if (cbTags.getSelectedIndex() == 0) {
-                    txtTags.setVisible(false);
-                    btnBrowseTags.setVisible(false);
-                    cbExtTags.setVisible(false);
-                } else if (cbTags.getSelectedIndex() == 1) {
-                    txtTags.setText("");
-                    txtTags.setEditable(false);
-                    txtTags.setVisible(true);
-                    btnBrowseTags.setVisible(true);
-                    cbExtTags.setVisible(false);
-                } else {
-                    txtTags.setText("-tags");
-                    txtTags.setEditable(true);
-                    txtTags.setVisible(true);
-                    btnBrowseTags.setVisible(false);
-                    cbExtTags.setVisible(true);
-                }
-            }
-        });
-
-        btnBrowseTags.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                configureTextFileChooser(chooser, "Select tags file");
-
-                int open = chooser.showOpenDialog(frmJMkvpropedit);
-
-                if (open == JFileChooser.APPROVE_OPTION) {
-                    if (chooser.getSelectedFile().exists()) {
-                        txtTags.setText(chooser.getSelectedFile().toString());
-                    }
-                }
-            }
-        });
+        wireSourceSection(chbChapters, cbChapters, txtChapters, btnBrowseChapters, cbExtChapters,
+                "-chapters", "Select chapters file");
+        wireSourceSection(chbTags, cbTags, txtTags, btnBrowseTags, cbExtTags,
+                "-tags", "Select tags file");
 
         chbExtraCmdGeneral.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -1107,7 +940,97 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                 txtExtraCmdGeneral.setEnabled(!state);
             }
         });
+    }
 
+    /**
+     * Wires one General-tab source section (chapters or tags): the section
+     * checkbox gates the mode combo, the combo picks the row's mode (0 = hide,
+     * 1 = fixed file, 2 = suffix match with {@code matchDefaultText}) and the
+     * Browse button fills the text field through the txt/xml chooser.
+     */
+    private void wireSourceSection(JCheckBox section, JComboBox<String> mode, JTextField text,
+            JButton browse, JComboBox<String> extension, String matchDefaultText, String browseTitle) {
+        section.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                boolean state = mode.isEnabled();
+                mode.setEnabled(!state);
+
+                if (mode.getSelectedIndex() == 1) {
+                    text.setEditable(false);
+                    text.setVisible(true);
+                    text.setEnabled(!state);
+                    browse.setVisible(true);
+                    browse.setEnabled(!state);
+                    extension.setVisible(false);
+                } else if (mode.getSelectedIndex() == 2) {
+                    text.setEditable(true);
+                    text.setVisible(true);
+                    text.setEnabled(!state);
+                    browse.setVisible(false);
+                    browse.setEnabled(!state);
+                    extension.setVisible(true);
+                    extension.setEnabled(!state);
+                } else if (!section.isSelected()) {
+                    text.setVisible(false);
+                    browse.setVisible(false);
+                    extension.setVisible(false);
+                }
+            }
+        });
+
+        mode.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (mode.getSelectedIndex() == 0) {
+                    text.setVisible(false);
+                    browse.setVisible(false);
+                    extension.setVisible(false);
+                } else if (mode.getSelectedIndex() == 1) {
+                    text.setText("");
+                    text.setEditable(false);
+                    text.setVisible(true);
+                    browse.setVisible(true);
+                    extension.setVisible(false);
+                } else {
+                    text.setText(matchDefaultText);
+                    text.setEditable(true);
+                    text.setVisible(true);
+                    browse.setVisible(false);
+                    extension.setVisible(true);
+                }
+            }
+        });
+
+        browse.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                configureTextFileChooser(chooser, browseTitle);
+
+                int open = chooser.showOpenDialog(frmJMkvpropedit);
+
+                if (open == JFileChooser.APPROVE_OPTION) {
+                    if (chooser.getSelectedFile().exists()) {
+                        text.setText(chooser.getSelectedFile().toString());
+                    }
+                }
+            }
+        });
+    }
+
+    private void clampNonNegativeNumber(JTextField field) {
+        field.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                try {
+                    if (Integer.parseInt(field.getText()) < 0) {
+                        field.setText("1");
+                    }
+                } catch (NumberFormatException e1) {
+                    field.setText("1");
+                }
+            }
+        });
+    }
+
+    private void wireExecutableOptions() {
         chbMkvPropExeDef.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 txtMkvPropExe.setText("mkvpropedit");
@@ -1137,7 +1060,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                 }
             }
         });
+    }
 
+    private void wireActionButtons() {
         btnProcessFiles.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 if (modelFiles.getSize() == 0) {
@@ -1178,13 +1103,11 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                     } else {
                         txtOutput.setText("");
 
-                        if (cmdLineBatch.size() > 0) {
-                            for (int i = 0; i < modelFiles.size(); i++) {
-                                txtOutput.append(cmdLineBatch.get(i) + "\n");
-                            }
-
-                            pnlTabs.setSelectedIndex(pnlTabs.getTabCount() - 1);
+                        for (int i = 0; i < modelFiles.size(); i++) {
+                            txtOutput.append(cmdLineBatch.get(i) + "\n");
                         }
+
+                        pnlTabs.setSelectedIndex(pnlTabs.getTabCount() - 1);
                     }
                 }
             }
@@ -1277,10 +1200,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         // batch runs.
         final List<String> batch = List.copyOf(cmdLineBatch);
         final List<String[]> batchOpt = List.copyOf(cmdLineBatchOpt);
-        final List<String> fileNames = new ArrayList<>();
-        for (int i = 0; i < modelFiles.getSize(); i++) {
-            fileNames.add(modelFiles.get(i));
-        }
+        final List<String> fileNames = fileList();
         final String exePath = txtMkvPropExe.getText();
 
         worker = new SwingWorker<Void, Void>() {
@@ -1411,11 +1331,9 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private void parseFiles(String[] argsArray) {
         if (argsArray.length > 0) {
-            File file = null;
-
             for (String arg : argsArray) {
                 try {
-                    file = new File(arg);
+                    File file = new File(arg);
 
                     if (!file.exists()) {
                         continue;
@@ -1537,10 +1455,11 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private void addFile(File file, boolean checkExtension) {
         try {
-            if (!modelFiles.contains(file.getCanonicalPath()) && !checkExtension) {
-                modelFiles.add(modelFiles.getSize(), file.getCanonicalPath());
-            } else if (!modelFiles.contains(file.getCanonicalPath()) && MATROSKA_EXT_FILTER.accept(file)) {
-                modelFiles.add(modelFiles.getSize(), file.getCanonicalPath());
+            String path = file.getCanonicalPath();
+
+            if (!modelFiles.contains(path)
+                    && (!checkExtension || FileScanner.isMatroskaFile(file.toPath()))) {
+                modelFiles.add(modelFiles.getSize(), path);
             }
         } catch (IOException e) {
             appendOutput("Error: could not resolve " + file + ": " + e + "\n");
