@@ -294,6 +294,11 @@ public class FileDrop {
     // END 2007-09-12 Nathan Blomquist -- Linux (KDE/Gnome) support added.
 
     private void makeDropTarget(final PrintStream out, final Component c, boolean recursive) {
+        if (GraphicsEnvironment.isHeadless()) {
+            log(out, "FileDrop: headless environment, drag and drop disabled.");
+            return;
+        }
+
         // Make drop target
         final DropTarget dt = new DropTarget();
         try {
