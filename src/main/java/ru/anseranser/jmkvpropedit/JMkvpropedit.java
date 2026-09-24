@@ -106,6 +106,7 @@ public class JMkvpropedit {
 
     private File iniFile = new File("JMkvpropedit.ini");
     private static final MkvStrings mkvStrings = new MkvStrings();
+    private final CommandBuilder commandBuilder = new CommandBuilder();
 
     private JFileChooser chooser = new JFileChooser(System.getProperty("user.home")) {
         private static final long serialVersionUID = 1L;
@@ -4134,477 +4135,96 @@ public class JMkvpropedit {
 
     /* Start of command line methods */
 
-    private void setCmdLineGeneral() {
-        cmdLineGeneral = new String[modelFiles.size()];
-        cmdLineGeneralOpt = new String[modelFiles.size()];
-        int start = Integer.parseInt(txtNumbStartGeneral.getText());
+    /**
+     * Snapshot of the file list as plain data for {@link CommandBuilder}.
+     */
+    private List<String> fileList() {
+        List<String> files = new ArrayList<>(modelFiles.size());
 
         for (int i = 0; i < modelFiles.size(); i++) {
-            cmdLineGeneral[i] = "";
-            cmdLineGeneralOpt[i] = "";
-
-            if (chbTags.isSelected()) {
-                switch (cbTags.getSelectedIndex()) {
-                case 0:
-                    cmdLineGeneral[i] += " --tags all:";
-                    cmdLineGeneralOpt[i] += " --tags all:";
-                    break;
-                case 1:
-                    if (txtTags.getText().trim().isEmpty()) {
-                        cmdLineGeneral[i] += " --tags all:";
-                        cmdLineGeneralOpt[i] += " --tags all:";
-                    } else {
-                        if (Utils.isWindows()) {
-                            cmdLineGeneral[i] += " --tags all:\"" + txtTags.getText() + "\"";
-                            cmdLineGeneralOpt[i] += " --tags all:\"" + Utils.escapeName(txtTags.getText()) + "\"";
-                        } else {
-                            cmdLineGeneral[i] += " --tags all:\"" + Utils.escapeQuotes(txtTags.getText()) + "\"";
-                            cmdLineGeneralOpt[i] += " --tags all:\"" + Utils.escapeName(txtTags.getText()) + "\"";
-                        }
-                    }
-                    break;
-                case 2:
-                    String tmpTags = Utils.getPathWithoutExt((String) modelFiles.get(i)) + txtTags.getText()
-                            + cbExtTags.getSelectedItem();
-
-                    if (Utils.isWindows()) {
-                        cmdLineGeneral[i] += " --tags all:\"" + tmpTags + "\"";
-                        cmdLineGeneralOpt[i] += " --tags all:\"" + Utils.escapeName(tmpTags) + "\"";
-                    } else {
-                        cmdLineGeneral[i] += " --tags all:\"" + Utils.escapeQuotes(tmpTags) + "\"";
-                        cmdLineGeneralOpt[i] += " --tags all:\"" + Utils.escapeName(tmpTags) + "\"";
-                    }
-                    break;
-                }
-            }
-
-            if (chbChapters.isSelected()) {
-                switch (cbChapters.getSelectedIndex()) {
-                case 0:
-                    cmdLineGeneral[i] += " --chapters \"\"";
-                    cmdLineGeneralOpt[i] += " --chapters ''";
-                    break;
-                case 1:
-                    if (txtChapters.getText().trim().isEmpty()) {
-                        cmdLineGeneral[i] += " --chapters \"\"";
-                        cmdLineGeneralOpt[i] += " --chapters ''";
-                    } else {
-                        if (Utils.isWindows()) {
-                            cmdLineGeneral[i] += " --chapters \"" + txtChapters.getText() + "\"";
-                            cmdLineGeneralOpt[i] += " --chapters \"" + Utils.escapeName(txtChapters.getText()) + "\"";
-                        } else {
-                            cmdLineGeneral[i] += " --chapters \"" + Utils.escapeQuotes(txtChapters.getText()) + "\"";
-                            cmdLineGeneralOpt[i] += " --chapters \"" + Utils.escapeName(txtChapters.getText()) + "\"";
-                        }
-                    }
-                    break;
-                case 2:
-                    String tmpChaps = Utils.getPathWithoutExt((String) modelFiles.get(i)) + txtChapters.getText()
-                            + cbExtChapters.getSelectedItem();
-
-                    if (Utils.isWindows()) {
-                        cmdLineGeneral[i] += " --chapters \"" + tmpChaps + "\"";
-                        cmdLineGeneralOpt[i] += " --chapters \"" + Utils.escapeName(tmpChaps) + "\"";
-                    } else {
-                        cmdLineGeneral[i] += " --chapters \"" + Utils.escapeQuotes(tmpChaps) + "\"";
-                        cmdLineGeneralOpt[i] += " --chapters \"" + Utils.escapeName(tmpChaps) + "\"";
-                    }
-                    break;
-                }
-            }
-
-            if (chbTitleGeneral.isSelected()) {
-                cmdLineGeneral[i] += " --edit info";
-                cmdLineGeneralOpt[i] += " --edit info";
-
-                String newTitle = txtTitleGeneral.getText();
-
-                if (chbNumbGeneral.isSelected()) {
-                    int pad = 0;
-
-                    pad = Integer.parseInt(txtNumbPadGeneral.getText());
-                    newTitle = newTitle.replace("{num}", Utils.padNumber(pad, start));
-
-                    start++;
-                }
-
-                newTitle = newTitle.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(i)));
-
-                cmdLineGeneral[i] += " --set title=\"" + Utils.escapeQuotes(newTitle) + "\"";
-                cmdLineGeneralOpt[i] += " --set title=\"" + Utils.escapeName(newTitle) + "\"";
-            }
-
-            if (chbExtraCmdGeneral.isSelected() && !txtExtraCmdGeneral.getText().trim().isEmpty()) {
-                cmdLineGeneral[i] += " " + txtExtraCmdGeneral.getText();
-                cmdLineGeneralOpt[i] += " " + Utils.escapeName(txtExtraCmdGeneral.getText());
-            }
+            files.add(modelFiles.get(i));
         }
 
+        return files;
+    }
+
+    /**
+     * Reads one track type's Swing slots into plain
+     * {@link CommandBuilder.TrackSettings}. The language code is resolved from
+     * the combo here, where the original resolved it while building the
+     * argument (and only when the language checkbox is selected).
+     */
+    private static List<CommandBuilder.TrackSettings> trackSettings(int trackCount,
+            JCheckBox[] chbEdit, JCheckBox[] chbEnable, JRadioButton[] rbYesEnable,
+            JCheckBox[] chbDefault, JRadioButton[] rbYesDef, JCheckBox[] chbForced,
+            JRadioButton[] rbYesForced, JCheckBox[] chbName, JTextField[] txtName,
+            JCheckBox[] chbNumb, JTextField[] txtNumbStart, JTextField[] txtNumbPad,
+            JCheckBox[] chbLang, JComboBox<String>[] cbLang,
+            JCheckBox[] chbExtra, JTextField[] txtExtra) {
+        List<CommandBuilder.TrackSettings> settings = new ArrayList<>(trackCount);
+        List<String> langCodes = mkvStrings.getLangCodeList();
+
+        for (int j = 0; j < trackCount; j++) {
+            boolean edit = chbEdit[j].isSelected();
+            boolean setLanguage = chbLang[j].isSelected();
+
+            settings.add(new CommandBuilder.TrackSettings(edit,
+                    chbEnable[j].isSelected(), rbYesEnable[j].isSelected(),
+                    chbDefault[j].isSelected(), rbYesDef[j].isSelected(),
+                    chbForced[j].isSelected(), rbYesForced[j].isSelected(),
+                    chbName[j].isSelected(), txtName[j].getText(),
+                    setLanguage, setLanguage ? langCodes.get(cbLang[j].getSelectedIndex()) : null,
+                    chbExtra[j].isSelected(), txtExtra[j].getText(),
+                    chbNumb[j].isSelected(), txtNumbStart[j].getText(), txtNumbPad[j].getText()));
+        }
+
+        return settings;
+    }
+
+    private void setCmdLineGeneral() {
+        CommandBuilder.GeneralSettings settings = new CommandBuilder.GeneralSettings(
+                new CommandBuilder.SourceSetting(chbTags.isSelected(), cbTags.getSelectedIndex(),
+                        txtTags.getText(), String.valueOf(cbExtTags.getSelectedItem())),
+                new CommandBuilder.SourceSetting(chbChapters.isSelected(), cbChapters.getSelectedIndex(),
+                        txtChapters.getText(), String.valueOf(cbExtChapters.getSelectedItem())),
+                new CommandBuilder.TitleSetting(chbTitleGeneral.isSelected(), chbNumbGeneral.isSelected(),
+                        txtTitleGeneral.getText(), txtNumbStartGeneral.getText(), txtNumbPadGeneral.getText()),
+                chbExtraCmdGeneral.isSelected(), txtExtraCmdGeneral.getText());
+
+        CommandBuilder.Section section = commandBuilder.buildGeneral(fileList(), settings);
+        cmdLineGeneral = section.plain();
+        cmdLineGeneralOpt = section.opt();
     }
 
     private void setCmdLineVideo() {
-        cmdLineVideo = new String[modelFiles.size()];
-        cmdLineVideoOpt = new String[modelFiles.size()];
-        String[] tmpCmdLineVideo = new String[nVideo];
-        String[] tmpCmdLineVideoOpt = new String[nVideo];
-        int[] numStartVideo = new int[nVideo];
-        int[] numPadVideo = new int[nVideo];
-
-        for (int i = 0; i < modelFiles.size(); i++) {
-            int editCount = 0;
-            cmdLineVideo[i] = "";
-            cmdLineVideoOpt[i] = "";
-
-            for (int j = 0; j < nVideo; j++) {
-                if (chbEditVideo[j].isSelected()) {
-                    numStartVideo[j] = Integer.parseInt(txtNumbStartVideo[j].getText());
-                    numPadVideo[j] = Integer.parseInt(txtNumbPadVideo[j].getText());
-
-                    tmpCmdLineVideo[j] = "";
-                    tmpCmdLineVideoOpt[j] = "";
-
-                    if (chbEditVideo[j].isSelected()) {
-                        tmpCmdLineVideo[j] += " --edit track:v" + (j + 1);
-                        tmpCmdLineVideoOpt[j] += " --edit track:v" + (j + 1);
-                    }
-                    
-                    if (chbEnableVideo[j].isSelected()) {
-                        tmpCmdLineVideo[j] += " --set flag-enabled=";
-                        tmpCmdLineVideoOpt[j] += " --set flag-enabled=";
-
-                        if (rbYesEnableVideo[j].isSelected()) {
-                            tmpCmdLineVideo[j] += "1";
-                            tmpCmdLineVideoOpt[j] += "1";
-                        } else {
-                            tmpCmdLineVideo[j] += "0";
-                            tmpCmdLineVideoOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbDefaultVideo[j].isSelected()) {
-                        tmpCmdLineVideo[j] += " --set flag-default=";
-                        tmpCmdLineVideoOpt[j] += " --set flag-default=";
-
-                        if (rbYesDefVideo[j].isSelected()) {
-                            tmpCmdLineVideo[j] += "1";
-                            tmpCmdLineVideoOpt[j] += "1";
-                        } else {
-                            tmpCmdLineVideo[j] += "0";
-                            tmpCmdLineVideoOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbForcedVideo[j].isSelected()) {
-                        tmpCmdLineVideo[j] += " --set flag-forced=";
-                        tmpCmdLineVideoOpt[j] += " --set flag-forced=";
-
-                        if (rbYesForcedVideo[j].isSelected()) {
-                            tmpCmdLineVideo[j] += "1";
-                            tmpCmdLineVideoOpt[j] += "1";
-                        } else {
-                            tmpCmdLineVideo[j] += "0";
-                            tmpCmdLineVideoOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbNameVideo[j].isSelected()) {
-                        tmpCmdLineVideo[j] += " --set name=\"" + Utils.escapeQuotes(txtNameVideo[j].getText()) + "\"";
-                        tmpCmdLineVideoOpt[j] += " --set name=\"" + Utils.escapeName(txtNameVideo[j].getText()) + "\"";
-                        editCount++;
-                    }
-
-                    if (chbLangVideo[j].isSelected()) {
-                        String curLangCode = mkvStrings.getLangCodeList().get(cbLangVideo[j].getSelectedIndex());
-                        tmpCmdLineVideo[j] += " --set language=\"" + curLangCode + "\"";
-                        tmpCmdLineVideoOpt[j] += " --set language=\"" + curLangCode + "\"";
-                        editCount++;
-                    }
-
-                    if (chbExtraCmdVideo[j].isSelected() && !txtExtraCmdVideo[j].getText().trim().isEmpty()) {
-                        tmpCmdLineVideo[j] += " " + txtExtraCmdVideo[j].getText();
-                        tmpCmdLineVideoOpt[j] += " " + Utils.escapeBackslashes(txtExtraCmdVideo[j].getText());
-                        editCount++;
-                    }
-
-                    if (editCount == 0) {
-                        tmpCmdLineVideo[j] = "";
-                        tmpCmdLineVideoOpt[j] = "";
-                    }
-                } else {
-                    tmpCmdLineVideo[j] = "";
-                    tmpCmdLineVideoOpt[j] = "";
-                }
-            }
-        }
-
-        for (int i = 0; i < nVideo; i++) {
-            for (int j = 0; j < modelFiles.size(); j++) {
-                String tmpText = tmpCmdLineVideo[i];
-                String tmpText2 = tmpCmdLineVideoOpt[i];
-
-                if (chbNumbVideo[i].isSelected() && chbEditVideo[i].isSelected()) {
-                    tmpText = tmpText.replace("{num}", Utils.padNumber(numPadVideo[i], numStartVideo[i]));
-                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadVideo[i], numStartVideo[i]));
-                    numStartVideo[i]++;
-                }
-
-                tmpText = tmpText.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-                tmpText2 = tmpText2.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-
-                cmdLineVideo[j] += tmpText;
-                cmdLineVideoOpt[j] += tmpText2;
-            }
-        }
+        CommandBuilder.Section section = commandBuilder.buildTracks(fileList(), 'v',
+                trackSettings(nVideo, chbEditVideo, chbEnableVideo, rbYesEnableVideo, chbDefaultVideo,
+                        rbYesDefVideo, chbForcedVideo, rbYesForcedVideo, chbNameVideo, txtNameVideo,
+                        chbNumbVideo, txtNumbStartVideo, txtNumbPadVideo, chbLangVideo, cbLangVideo,
+                        chbExtraCmdVideo, txtExtraCmdVideo));
+        cmdLineVideo = section.plain();
+        cmdLineVideoOpt = section.opt();
     }
 
     private void setCmdLineAudio() {
-        cmdLineAudio = new String[modelFiles.size()];
-        cmdLineAudioOpt = new String[modelFiles.size()];
-        String[] tmpCmdLineAudio = new String[nAudio];
-        String[] tmpCmdLineAudioOpt = new String[nAudio];
-        int[] numStartAudio = new int[nAudio];
-        int[] numPadAudio = new int[nAudio];
-
-        for (int i = 0; i < modelFiles.size(); i++) {
-            int editCount = 0;
-            cmdLineAudio[i] = "";
-            cmdLineAudioOpt[i] = "";
-
-            for (int j = 0; j < nAudio; j++) {
-                if (chbEditAudio[j].isSelected()) {
-                    numStartAudio[j] = Integer.parseInt(txtNumbStartAudio[j].getText());
-                    numPadAudio[j] = Integer.parseInt(txtNumbPadAudio[j].getText());
-
-                    tmpCmdLineAudio[j] = "";
-                    tmpCmdLineAudioOpt[j] = "";
-
-                    if (chbEditAudio[j].isSelected()) {
-                        tmpCmdLineAudio[j] += " --edit track:a" + (j + 1);
-                        tmpCmdLineAudioOpt[j] += " --edit track:a" + (j + 1);
-                    }
-
-                    if (chbEnableAudio[j].isSelected()) {
-                        tmpCmdLineAudio[j] += " --set flag-enabled=";
-                        tmpCmdLineAudioOpt[j] += " --set flag-enabled=";
-
-                        if (rbYesEnableAudio[j].isSelected()) {
-                            tmpCmdLineAudio[j] += "1";
-                            tmpCmdLineAudioOpt[j] += "1";
-                        } else {
-                            tmpCmdLineAudio[j] += "0";
-                            tmpCmdLineAudioOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-                    
-                    if (chbDefaultAudio[j].isSelected()) {
-                        tmpCmdLineAudio[j] += " --set flag-default=";
-                        tmpCmdLineAudioOpt[j] += " --set flag-default=";
-
-                        if (rbYesDefAudio[j].isSelected()) {
-                            tmpCmdLineAudio[j] += "1";
-                            tmpCmdLineAudioOpt[j] += "1";
-                        } else {
-                            tmpCmdLineAudio[j] += "0";
-                            tmpCmdLineAudioOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbForcedAudio[j].isSelected()) {
-                        tmpCmdLineAudio[j] += " --set flag-forced=";
-                        tmpCmdLineAudioOpt[j] += " --set flag-forced=";
-
-                        if (rbYesForcedAudio[j].isSelected()) {
-                            tmpCmdLineAudio[j] += "1";
-                            tmpCmdLineAudioOpt[j] += "1";
-                        } else {
-                            tmpCmdLineAudio[j] += "0";
-                            tmpCmdLineAudioOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbNameAudio[j].isSelected()) {
-                        tmpCmdLineAudio[j] += " --set name=\"" + Utils.escapeQuotes(txtNameAudio[j].getText()) + "\"";
-                        tmpCmdLineAudioOpt[j] += " --set name=\"" + Utils.escapeName(txtNameAudio[j].getText()) + "\"";
-                        editCount++;
-                    }
-
-                    if (chbLangAudio[j].isSelected()) {
-                        String curLangCode = mkvStrings.getLangCodeList().get(cbLangAudio[j].getSelectedIndex());
-                        tmpCmdLineAudio[j] += " --set language=\"" + curLangCode + "\"";
-                        tmpCmdLineAudioOpt[j] += " --set language=\"" + curLangCode + "\"";
-                        editCount++;
-                    }
-
-                    if (chbExtraCmdAudio[j].isSelected() && !txtExtraCmdAudio[j].getText().trim().isEmpty()) {
-                        tmpCmdLineAudio[j] += " " + txtExtraCmdAudio[j].getText();
-                        tmpCmdLineAudioOpt[j] += " " + Utils.escapeBackslashes(txtExtraCmdAudio[j].getText());
-                        editCount++;
-                    }
-
-                    if (editCount == 0) {
-                        tmpCmdLineAudio[j] = "";
-                        tmpCmdLineAudioOpt[j] = "";
-                    }
-                } else {
-                    tmpCmdLineAudio[j] = "";
-                    tmpCmdLineAudioOpt[j] = "";
-                }
-            }
-        }
-
-        for (int i = 0; i < nAudio; i++) {
-            for (int j = 0; j < modelFiles.size(); j++) {
-                String tmpText = tmpCmdLineAudio[i];
-                String tmpText2 = tmpCmdLineAudioOpt[i];
-
-                if (chbNumbAudio[i].isSelected() && chbEditAudio[i].isSelected()) {
-                    tmpText = tmpText.replace("{num}", Utils.padNumber(numPadAudio[i], numStartAudio[i]));
-                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadAudio[i], numStartAudio[i]));
-                    numStartAudio[i]++;
-                }
-
-                tmpText = tmpText.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-                tmpText2 = tmpText2.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-
-                cmdLineAudio[j] += tmpText;
-                cmdLineAudioOpt[j] += tmpText2;
-            }
-        }
+        CommandBuilder.Section section = commandBuilder.buildTracks(fileList(), 'a',
+                trackSettings(nAudio, chbEditAudio, chbEnableAudio, rbYesEnableAudio, chbDefaultAudio,
+                        rbYesDefAudio, chbForcedAudio, rbYesForcedAudio, chbNameAudio, txtNameAudio,
+                        chbNumbAudio, txtNumbStartAudio, txtNumbPadAudio, chbLangAudio, cbLangAudio,
+                        chbExtraCmdAudio, txtExtraCmdAudio));
+        cmdLineAudio = section.plain();
+        cmdLineAudioOpt = section.opt();
     }
 
     private void setCmdLineSubtitle() {
-        cmdLineSubtitle = new String[modelFiles.size()];
-        cmdLineSubtitleOpt = new String[modelFiles.size()];
-        String[] tmpCmdLineSubtitle = new String[nSubtitle];
-        String[] tmpCmdLineSubtitleOpt = new String[nSubtitle];
-        int[] numStartSubtitle = new int[nSubtitle];
-        int[] numPadSubtitle = new int[nSubtitle];
-
-        for (int i = 0; i < modelFiles.size(); i++) {
-            int editCount = 0;
-            cmdLineSubtitle[i] = "";
-            cmdLineSubtitleOpt[i] = "";
-
-            for (int j = 0; j < nSubtitle; j++) {
-                if (chbEditSubtitle[j].isSelected()) {
-                    numStartSubtitle[j] = Integer.parseInt(txtNumbStartSubtitle[j].getText());
-                    numPadSubtitle[j] = Integer.parseInt(txtNumbPadSubtitle[j].getText());
-
-                    tmpCmdLineSubtitle[j] = "";
-                    tmpCmdLineSubtitleOpt[j] = "";
-
-                    if (chbEditSubtitle[j].isSelected()) {
-                        tmpCmdLineSubtitle[j] += " --edit track:s" + (j + 1);
-                        tmpCmdLineSubtitleOpt[j] += " --edit track:s" + (j + 1);
-                    }
-                    
-                    if (chbEnableSubtitle[j].isSelected()) {
-                        tmpCmdLineSubtitle[j] += " --set flag-enabled=";
-                        tmpCmdLineSubtitleOpt[j] += " --set flag-enabled=";
-
-                        if (rbYesEnableSubtitle[j].isSelected()) {
-                            tmpCmdLineSubtitle[j] += "1";
-                            tmpCmdLineSubtitleOpt[j] += "1";
-                        } else {
-                            tmpCmdLineSubtitle[j] += "0";
-                            tmpCmdLineSubtitleOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbDefaultSubtitle[j].isSelected()) {
-                        tmpCmdLineSubtitle[j] += " --set flag-default=";
-                        tmpCmdLineSubtitleOpt[j] += " --set flag-default=";
-
-                        if (rbYesDefSubtitle[j].isSelected()) {
-                            tmpCmdLineSubtitle[j] += "1";
-                            tmpCmdLineSubtitleOpt[j] += "1";
-                        } else {
-                            tmpCmdLineSubtitle[j] += "0";
-                            tmpCmdLineSubtitleOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbForcedSubtitle[j].isSelected()) {
-                        tmpCmdLineSubtitle[j] += " --set flag-forced=";
-                        tmpCmdLineSubtitleOpt[j] += " --set flag-forced=";
-
-                        if (rbYesForcedSubtitle[j].isSelected()) {
-                            tmpCmdLineSubtitle[j] += "1";
-                            tmpCmdLineSubtitleOpt[j] += "1";
-                        } else {
-                            tmpCmdLineSubtitle[j] += "0";
-                            tmpCmdLineSubtitleOpt[j] += "0";
-                        }
-
-                        editCount++;
-                    }
-
-                    if (chbNameSubtitle[j].isSelected()) {
-                        tmpCmdLineSubtitle[j] += " --set name=\"" + Utils.escapeQuotes(txtNameSubtitle[j].getText())
-                                + "\"";
-                        tmpCmdLineSubtitleOpt[j] += " --set name=\"" + Utils.escapeName(txtNameSubtitle[j].getText())
-                                + "\"";
-                        editCount++;
-                    }
-
-                    if (chbLangSubtitle[j].isSelected()) {
-                        String curLangCode = mkvStrings.getLangCodeList().get(cbLangSubtitle[j].getSelectedIndex());
-                        tmpCmdLineSubtitle[j] += " --set language=\"" + curLangCode + "\"";
-                        tmpCmdLineSubtitleOpt[j] += " --set language=\"" + curLangCode + "\"";
-                        editCount++;
-                    }
-
-                    if (chbExtraCmdSubtitle[j].isSelected() && !txtExtraCmdSubtitle[j].getText().trim().isEmpty()) {
-                        tmpCmdLineSubtitle[j] += " " + txtExtraCmdSubtitle[j].getText();
-                        tmpCmdLineSubtitleOpt[j] += " " + Utils.escapeBackslashes(txtExtraCmdSubtitle[j].getText());
-                        editCount++;
-                    }
-
-                    if (editCount == 0) {
-                        tmpCmdLineSubtitle[j] = "";
-                        tmpCmdLineSubtitleOpt[j] = "";
-                    }
-                } else {
-                    tmpCmdLineSubtitle[j] = "";
-                    tmpCmdLineSubtitleOpt[j] = "";
-                }
-            }
-        }
-
-        for (int i = 0; i < nSubtitle; i++) {
-            for (int j = 0; j < modelFiles.size(); j++) {
-                String tmpText = tmpCmdLineSubtitle[i];
-                String tmpText2 = tmpCmdLineSubtitleOpt[i];
-
-                if (chbNumbSubtitle[i].isSelected() && chbEditSubtitle[i].isSelected()) {
-                    tmpText = tmpText.replace("{num}", Utils.padNumber(numPadSubtitle[i], numStartSubtitle[i]));
-                    tmpText2 = tmpText2.replace("{num}", Utils.padNumber(numPadSubtitle[i], numStartSubtitle[i]));
-                    numStartSubtitle[i]++;
-                }
-
-                tmpText = tmpText.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-                tmpText2 = tmpText2.replace("{file_name}", Utils.getFileNameWithoutExt((String) modelFiles.get(j)));
-
-                cmdLineSubtitle[j] += tmpText;
-                cmdLineSubtitleOpt[j] += tmpText2;
-            }
-        }
+        CommandBuilder.Section section = commandBuilder.buildTracks(fileList(), 's',
+                trackSettings(nSubtitle, chbEditSubtitle, chbEnableSubtitle, rbYesEnableSubtitle,
+                        chbDefaultSubtitle, rbYesDefSubtitle, chbForcedSubtitle, rbYesForcedSubtitle,
+                        chbNameSubtitle, txtNameSubtitle, chbNumbSubtitle, txtNumbStartSubtitle,
+                        txtNumbPadSubtitle, chbLangSubtitle, cbLangSubtitle,
+                        chbExtraCmdSubtitle, txtExtraCmdSubtitle));
+        cmdLineSubtitle = section.plain();
+        cmdLineSubtitleOpt = section.opt();
     }
 
     private void setCmdLineAttachmentsAdd() {
@@ -4715,34 +4335,21 @@ public class JMkvpropedit {
         setCmdLineAttachmentsReplace();
         setCmdLineAttachmentsDelete();
 
-        cmdLineBatch = new ArrayList<String>();
-        cmdLineBatchOpt = new ArrayList<String[]>();
+        CommandBuilder.Attachments attachments = new CommandBuilder.Attachments(
+                new CommandBuilder.AttachmentArgs(cmdLineAttachmentsDelete, cmdLineAttachmentsAdd,
+                        cmdLineAttachmentsReplace),
+                new CommandBuilder.AttachmentArgs(cmdLineAttachmentsDeleteOpt, cmdLineAttachmentsAddOpt,
+                        cmdLineAttachmentsReplaceOpt));
 
-        String cmdTemp = cmdLineGeneral[0] + cmdLineAttachmentsDelete + cmdLineAttachmentsAdd
-                + cmdLineAttachmentsReplace + cmdLineVideo[0] + cmdLineAudio[0] + cmdLineSubtitle[0];
+        CommandBuilder.Batch batch = commandBuilder.buildBatch(txtMkvPropExe.getText(), fileList(),
+                new CommandBuilder.Section(cmdLineGeneral, cmdLineGeneralOpt),
+                new CommandBuilder.Section(cmdLineVideo, cmdLineVideoOpt),
+                new CommandBuilder.Section(cmdLineAudio, cmdLineAudioOpt),
+                new CommandBuilder.Section(cmdLineSubtitle, cmdLineSubtitleOpt),
+                attachments);
 
-        if (!cmdTemp.isEmpty()) {
-            for (int i = 0; i < modelFiles.getSize(); i++) {
-                String cmdLineAll = cmdLineGeneral[i] + cmdLineAttachmentsDelete + cmdLineAttachmentsAdd
-                        + cmdLineAttachmentsReplace + cmdLineVideo[i] + cmdLineAudio[i] + cmdLineSubtitle[i];
-
-                String cmdLineAllOpt = cmdLineGeneralOpt[i] + cmdLineAttachmentsDeleteOpt + cmdLineAttachmentsAddOpt
-                        + cmdLineAttachmentsReplaceOpt + cmdLineVideoOpt[i] + cmdLineAudioOpt[i]
-                        + cmdLineSubtitleOpt[i];
-
-                if (Utils.isWindows()) {
-                    cmdLineBatch.add("\"" + txtMkvPropExe.getText() + "\" \"" + modelFiles.get(i) + "\"" + cmdLineAll);
-                    cmdLineBatchOpt.add(
-                            toOptArgs("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt));
-                } else {
-                    cmdLineBatch.add("\"" + Utils.escapeQuotes(txtMkvPropExe.getText()) + "\" " + "\""
-                            + Utils.escapeQuotes((String) modelFiles.get(i)) + "\"" + cmdLineAll);
-
-                    cmdLineBatchOpt.add(
-                            toOptArgs("\"" + Utils.escapeName((String) modelFiles.get(i)) + "\"" + cmdLineAllOpt));
-                }
-            }
-        }
+        cmdLineBatch = batch.lines();
+        cmdLineBatchOpt = batch.optArgs();
     }
 
     private void executeBatch() {
@@ -4828,21 +4435,12 @@ public class JMkvpropedit {
 
     /**
      * Cracks an Opt command line into the argument list for options.json.
-     *
-     * <p>
-     * The Opt strings still carry {@link Utils#escapeName}'s encoding (quote
-     * placeholder + doubled backslashes, frozen by issue #3). It is unwound
-     * exactly once here, at the boundary where the string form becomes
-     * structured arguments; JSON escaping itself (see {@link #optionsJson})
-     * is placeholder-free.
-     * </p>
+     * The logic (including unwinding {@link Utils#escapeName}'s encoding)
+     * lives in {@link CommandBuilder#toOptArgs}; this alias keeps the entry
+     * point where existing harness code expects it.
      */
     static String[] toOptArgs(String optCommandLine) {
-        String[] args = Commandline.translateCommandline(optCommandLine);
-        for (int i = 0; i < args.length; i++) {
-            args[i] = decodeOptEscaping(args[i]);
-        }
-        return args;
+        return CommandBuilder.toOptArgs(optCommandLine);
     }
 
     /**
@@ -4859,14 +4457,6 @@ public class JMkvpropedit {
             json.append('\n');
         }
         return json.append("]\n").toString();
-    }
-
-    /**
-     * Unwinds {@link Utils#escapeName}'s quote placeholder and doubled
-     * backslashes, so the original data can be JSON-escaped from scratch.
-     */
-    private static String decodeOptEscaping(String token) {
-        return token.replace("####escaped__quotes#####", "\"").replace("\\\\", "\\");
     }
 
     /**
