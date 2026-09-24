@@ -25,8 +25,11 @@ import javax.swing.SwingWorker;
 /**
  * Framework-free verification harness for issue #5 (Swing threading: no
  * busy-wait for the SwingWorker on the EDT, Swing calls from background code
- * go through the EDT, the process-output reader thread terminates, and process
- * streams are decoded as explicit UTF-8).
+ * go through the EDT, and process streams are decoded as explicit UTF-8).
+ * The output-reader checks that used to drive StreamGobbler now exercise
+ * {@link ProcessRunner#forwardOutput} — issue #14 moved the reader out of
+ * the god class; reader-thread termination is covered by the batch check
+ * (a runner that failed to join its reader would hang the worker's get()).
  *
  * <p>
  * The Gradle build files are out of scope for issue #5, so this harness is a
@@ -62,9 +65,8 @@ public final class SwingThreadsChecks {
                 + " (expect ISO-8859-1 when run with -Dfile.encoding=ISO-8859-1)");
         System.out.println();
 
-        checkGobblerAppendsOnEdt();
-        checkGobblerDecodesUtf8();
-        checkGobblerTerminatesAtEof();
+        checkOutputReaderDeliversLines();
+        checkOutputReaderDecodesUtf8();
         checkExecutableProbeResults();
         checkExecutableProbeDoesNotUseSwingWorker();
         checkBatchGoesThroughEdt();
@@ -75,26 +77,19 @@ public final class SwingThreadsChecks {
     }
 
     /**
-     * AC2: the reader thread must never touch the JTextArea directly; every
-     * append/caret update has to be marshalled to the EDT.
+     * AC2 (issue #5) / AC3 (issue #14): the process-output reader hands
+     * every line of a fake InputStream to the caller's consumer, in order
+     * and with its trailing newline; the EDT marshalling itself happens in
+     * the god class's appendOutput and is verified by the batch check.
      */
-    private static void checkGobblerAppendsOnEdt() throws Exception {
-        List<String> offEdt = Collections.synchronizedList(new ArrayList<>());
-        JTextArea target = recordingArea(offEdt);
+    private static void checkOutputReaderDeliversLines() {
+        List<String> out = new ArrayList<>();
         byte[] data = "first line\nsecond line\n".getBytes(StandardCharsets.UTF_8);
 
-        StreamGobbler gobbler = new StreamGobbler(new ByteArrayInputStream(data), target);
-        gobbler.start();
-        gobbler.join(TimeUnit.SECONDS.toMillis(5));
-        flushEdt();
+        ProcessRunner.forwardOutput(new ByteArrayInputStream(data), out::add);
 
-        check("gobbler touches the log only on the EDT",
-                offEdt.isEmpty(), "off-EDT operations: " + offEdt);
-
-        String text = target.getText();
-        check("gobbler delivers every line to the log",
-                text.contains("first line") && text.contains("second line"),
-                "text=" + quote(text));
+        check("output reader delivers every line to the consumer",
+                out.equals(List.of("first line\n", "second line\n")), "lines=" + out);
     }
 
     /**
@@ -102,33 +97,16 @@ public final class SwingThreadsChecks {
      * default charset. Meaningful only when the harness runs with
      * {@code -Dfile.encoding=ISO-8859-1} (see the class javadoc).
      */
-    private static void checkGobblerDecodesUtf8() throws Exception {
-        JTextArea target = new JTextArea();
+    private static void checkOutputReaderDecodesUtf8() {
         String expected = "привет, мир";
         byte[] data = (expected + "\n").getBytes(StandardCharsets.UTF_8);
+        List<String> out = new ArrayList<>();
 
-        StreamGobbler gobbler = new StreamGobbler(new ByteArrayInputStream(data), target);
-        gobbler.start();
-        gobbler.join(TimeUnit.SECONDS.toMillis(5));
-        flushEdt();
+        ProcessRunner.forwardOutput(new ByteArrayInputStream(data), out::add);
 
         check("process output is decoded as UTF-8, not the platform charset",
-                target.getText().contains(expected),
-                "defaultCharset=" + Charset.defaultCharset() + ", text=" + quote(target.getText()));
-    }
-
-    /**
-     * AC3: the reader thread must finish on its own once the stream hits EOF
-     * (the batch worker joins it before printing the next separator).
-     */
-    private static void checkGobblerTerminatesAtEof() throws Exception {
-        StreamGobbler gobbler = new StreamGobbler(
-                new ByteArrayInputStream("line\n".getBytes(StandardCharsets.UTF_8)), new JTextArea());
-        gobbler.start();
-        gobbler.join(TimeUnit.SECONDS.toMillis(5));
-
-        check("reader thread terminates at end of stream", !gobbler.isAlive(),
-                "gobbler still alive 5s after EOF");
+                out.equals(List.of(expected + "\n")),
+                "defaultCharset=" + Charset.defaultCharset() + ", lines=" + out);
     }
 
     /**
