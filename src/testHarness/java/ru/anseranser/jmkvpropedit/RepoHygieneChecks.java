@@ -18,7 +18,9 @@ import java.util.stream.Stream;
  * pre-Gradle artifacts ({@code lib/}, {@code *.iml}). Issue #8 adds the
  * commons-io removal check (sources + Gradle dependencies on java.nio);
  * issue #15 adds the god-class IO extraction check (INI and folder-scan IO
- * live in {@link IniStore}/{@link FileScanner}, the modules stay Swing-free).
+ * live in {@link IniStore}/{@link FileScanner}, the modules stay Swing-free);
+ * issue #14 adds the process extraction check (process launch and output
+ * reading live in {@link ProcessRunner}, Swing-free; StreamGobbler is gone).
  *
  * <p>
  * The Gradle build files are out of scope for these issues, so this harness is
@@ -79,6 +81,7 @@ public final class RepoHygieneChecks {
         checkNoPreGradleArtifacts(root);
         checkNoCommonsIo(root.resolve("build.gradle.kts"), sources);
         checkIoStaysInModules(mainSrc);
+        checkProcessStaysInModule(mainSrc);
         checkMethodRename();
 
         System.out.println();
@@ -279,6 +282,59 @@ public final class RepoHygieneChecks {
                 "no iniStore. call found");
         check("god class delegates folder scanning to FileScanner", text.contains("FileScanner."),
                 "no FileScanner. call found");
+    }
+
+    /**
+     * AC (issue #14): process launch, output reading and the executable
+     * probe live in {@link ProcessRunner} — the module stays Swing-free,
+     * the god class only calls it, and the removed StreamGobbler stays
+     * gone.
+     */
+    private static void checkProcessStaysInModule(Path mainSrc) {
+        Path god = mainSrc.resolve("ru/anseranser/jmkvpropedit/JMkvpropedit.java");
+        Path processRunner = mainSrc.resolve("ru/anseranser/jmkvpropedit/ProcessRunner.java");
+        Path streamGobbler = mainSrc.resolve("ru/anseranser/jmkvpropedit/StreamGobbler.java");
+
+        check("ProcessRunner module exists", Files.isRegularFile(processRunner),
+                "ProcessRunner.java not found");
+        check("StreamGobbler is gone from main sources", !Files.exists(streamGobbler),
+                "StreamGobbler.java still exists");
+
+        if (Files.isRegularFile(processRunner)) {
+            String module = read(processRunner);
+            boolean swing = module.contains("javax.swing") || module.contains("java.awt");
+
+            check("ProcessRunner module has no Swing dependency", !swing,
+                    swing ? "imports Swing/AWT" : "");
+        }
+
+        if (!Files.isRegularFile(god)) {
+            check("god class delegates process execution to ProcessRunner", false,
+                    "JMkvpropedit.java not found");
+            return;
+        }
+
+        String text = read(god);
+        String[] banned = {
+                "new ProcessBuilder(",
+                "StreamGobbler",
+                "proc.getInputStream",
+                "pb.start(",
+        };
+        List<String> hits = new ArrayList<>();
+
+        for (String marker : banned) {
+            int at = text.indexOf(marker);
+
+            if (at >= 0) {
+                hits.add(god.getFileName() + ":" + lineNumber(text, at) + " (" + marker + ")");
+            }
+        }
+
+        check("god class has no direct process launch beyond ProcessRunner calls", hits.isEmpty(),
+                String.join(", ", hits));
+        check("god class delegates process execution to ProcessRunner", text.contains("ProcessRunner"),
+                "no ProcessRunner call found");
     }
 
     /** AC: the misspelled getMkvPropExeDefaullt() was renamed, not just its call site. */
