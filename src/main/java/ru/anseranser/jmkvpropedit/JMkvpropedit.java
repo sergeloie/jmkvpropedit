@@ -84,9 +84,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import org.ini4j.Ini;
-import org.ini4j.InvalidFileFormatException;
-
 public class JMkvpropedit implements AttachmentPanel.Host {
 
     private static final String VERSION_NUMBER = BuildVersion.VERSION;
@@ -94,7 +91,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private SwingWorker<Void, Void> worker = null;
 
-    private File iniFile = new File("JMkvpropedit.ini");
+    private final IniStore iniStore = new IniStore(new File("JMkvpropedit.ini"));
     private static final MkvStrings mkvStrings = new MkvStrings();
     private final CommandBuilder commandBuilder = new CommandBuilder();
 
@@ -1511,15 +1508,12 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     /* Start of INI configuration file methods */
 
     private void readIniFile() {
-        Ini ini = null;
-
-        if (iniFile.exists()) {
+        if (iniStore.exists()) {
             try {
-                ini = new Ini(iniFile);
-                String exePath = ini.get("General", "mkvpropedit");
+                String exePath = iniStore.readMkvpropedit();
 
                 if (exePath != null) {
-                    if (exePath.equals("mkvpropedit")) {
+                    if (exePath.equals(IniStore.DEFAULT_MKVPROPEDIT)) {
                         chbMkvPropExeDef.setSelected(true);
                         chbMkvPropExeDef.setEnabled(false);
                     } else {
@@ -1528,10 +1522,8 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                         chbMkvPropExeDef.setEnabled(true);
                     }
                 }
-            } catch (InvalidFileFormatException e) {
-                appendOutput("Error: malformed " + iniFile.getName() + ": " + e + "\n");
-            } catch (IOException e) {
-                appendOutput("Error: could not read " + iniFile.getName() + ": " + e + "\n");
+            } catch (IniStoreException e) {
+                appendOutput("Error: " + e.getMessage() + "\n");
             }
         } else if (Utils.isWindows()) {
             String exePath = getMkvPropExeDefault();
@@ -1546,44 +1538,22 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     }
 
     private void saveIniFile(File exeFile) {
-        Ini ini = null;
-
         txtMkvPropExe.setText(exeFile.toString());
         chbMkvPropExeDef.setSelected(false);
         chbMkvPropExeDef.setEnabled(true);
 
         try {
-            if (!iniFile.exists()) {
-                iniFile.createNewFile();
-            }
-
-            ini = new Ini(iniFile);
-            ini.put("General", "mkvpropedit", exeFile.toString());
-            ini.store();
-        } catch (InvalidFileFormatException e1) {
-            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
-        } catch (IOException e1) {
-            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
+            iniStore.saveMkvpropedit(exeFile.toString());
+        } catch (IniStoreException e) {
+            appendOutput("Error: " + e.getMessage() + "\n");
         }
     }
 
     private void defaultIniFile() {
-        Ini ini = null;
-
         try {
-            if (!iniFile.exists()) {
-                iniFile.createNewFile();
-            }
-
-            ini = new Ini(iniFile);
-
-            ini.put("General", "mkvpropedit", "mkvpropedit");
-
-            ini.store();
-        } catch (InvalidFileFormatException e1) {
-            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
-        } catch (IOException e1) {
-            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
+            iniStore.saveMkvpropedit(IniStore.DEFAULT_MKVPROPEDIT);
+        } catch (IniStoreException e) {
+            appendOutput("Error: " + e.getMessage() + "\n");
         }
     }
 
