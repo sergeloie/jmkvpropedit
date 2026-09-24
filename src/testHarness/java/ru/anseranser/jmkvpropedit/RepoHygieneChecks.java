@@ -16,7 +16,9 @@ import java.util.stream.Stream;
  * Repo hygiene checks for issue #7: no manual GC, no swallowed exceptions,
  * no misspelled UI strings/identifiers, an up-to-date readme, and no
  * pre-Gradle artifacts ({@code lib/}, {@code *.iml}). Issue #8 adds the
- * commons-io removal check (sources + Gradle dependencies on java.nio).
+ * commons-io removal check (sources + Gradle dependencies on java.nio);
+ * issue #15 adds the god-class IO extraction check (INI and folder-scan IO
+ * live in {@link IniStore}/{@link FileScanner}, the modules stay Swing-free).
  *
  * <p>
  * The Gradle build files are out of scope for these issues, so this harness is
@@ -76,6 +78,7 @@ public final class RepoHygieneChecks {
         checkReadmeRequiresJava21(root.resolve("readme.txt"));
         checkNoPreGradleArtifacts(root);
         checkNoCommonsIo(root.resolve("build.gradle.kts"), sources);
+        checkIoStaysInModules(mainSrc);
         checkMethodRename();
 
         System.out.println();
@@ -216,6 +219,66 @@ public final class RepoHygieneChecks {
 
         check("commons-io removed from build.gradle.kts", at < 0,
                 at < 0 ? "" : buildGradle + ":" + lineNumber(text, at));
+    }
+
+    /**
+     * AC (issue #15): the god class keeps no INI or folder-scan file IO of
+     * its own — only calls into {@link IniStore} and {@link FileScanner} —
+     * and both modules carry no Swing dependency.
+     */
+    private static void checkIoStaysInModules(Path mainSrc) {
+        Path god = mainSrc.resolve("ru/anseranser/jmkvpropedit/JMkvpropedit.java");
+        Path iniStore = mainSrc.resolve("ru/anseranser/jmkvpropedit/IniStore.java");
+        Path fileScanner = mainSrc.resolve("ru/anseranser/jmkvpropedit/FileScanner.java");
+
+        check("IniStore module exists", Files.isRegularFile(iniStore), "IniStore.java not found");
+        check("FileScanner module exists", Files.isRegularFile(fileScanner), "FileScanner.java not found");
+
+        for (Path module : new Path[] { iniStore, fileScanner }) {
+            if (!Files.isRegularFile(module)) {
+                continue;
+            }
+
+            String text = read(module);
+            boolean swing = text.contains("javax.swing") || text.contains("java.awt");
+
+            check(module.getFileName() + " has no Swing dependency", !swing,
+                    swing ? "imports Swing/AWT" : "");
+        }
+
+        if (!Files.isRegularFile(god)) {
+            check("god class has no ini or folder-scan io beyond module calls", false,
+                    "JMkvpropedit.java not found");
+            return;
+        }
+
+        String text = read(god);
+        String[] banned = {
+                "org.ini4j",
+                "new Ini(",
+                "InvalidFileFormatException",
+                "Files.walk",
+                "getPathMatcher",
+                "PathMatcher",
+                "createNewFile",
+                "import java.nio.file.Files",
+        };
+        List<String> hits = new ArrayList<>();
+
+        for (String marker : banned) {
+            int at = text.indexOf(marker);
+
+            if (at >= 0) {
+                hits.add(god.getFileName() + ":" + lineNumber(text, at) + " (" + marker + ")");
+            }
+        }
+
+        check("god class has no ini or folder-scan io beyond module calls", hits.isEmpty(),
+                String.join(", ", hits));
+        check("god class delegates INI io to IniStore", text.contains("iniStore."),
+                "no iniStore. call found");
+        check("god class delegates folder scanning to FileScanner", text.contains("FileScanner."),
+                "no FileScanner. call found");
     }
 
     /** AC: the misspelled getMkvPropExeDefaullt() was renamed, not just its call site. */

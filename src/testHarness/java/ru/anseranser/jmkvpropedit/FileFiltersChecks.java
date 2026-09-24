@@ -80,12 +80,12 @@ public final class FileFiltersChecks {
 
         for (String name : accepted) {
             check("matroska mask accepts " + name,
-                    JMkvpropedit.isMatroskaFile(Path.of(name)), "isMatroskaFile=false");
+                    FileScanner.isMatroskaFile(Path.of(name)), "isMatroskaFile=false");
         }
 
         for (String name : rejected) {
             check("matroska mask rejects " + name,
-                    !JMkvpropedit.isMatroskaFile(Path.of(name)), "isMatroskaFile=true");
+                    !FileScanner.isMatroskaFile(Path.of(name)), "isMatroskaFile=true");
         }
     }
 

@@ -49,14 +49,9 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Stream;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -84,9 +79,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import org.ini4j.Ini;
-import org.ini4j.InvalidFileFormatException;
-
 public class JMkvpropedit implements AttachmentPanel.Host {
 
     private static final String VERSION_NUMBER = BuildVersion.VERSION;
@@ -94,7 +86,7 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private SwingWorker<Void, Void> worker = null;
 
-    private File iniFile = new File("JMkvpropedit.ini");
+    private final IniStore iniStore = new IniStore(new File("JMkvpropedit.ini"));
     private static final MkvStrings mkvStrings = new MkvStrings();
     private final CommandBuilder commandBuilder = new CommandBuilder();
 
@@ -124,15 +116,6 @@ public class JMkvpropedit implements AttachmentPanel.Host {
 
     private FileFilter MATROSKA_EXT_FILTER = new FileNameExtensionFilter(
             "Matroska files (*.mkv; *.mka; *.mk3d; *.webm; *.mks)", "mkv", "mka", "mk3d", "webm", "mks");
-
-    /**
-     * Folder-scan glob for Matroska files: mkv/mka/mk3d/webm/mks. The glob
-     * itself is lowercase; {@link #isMatroskaFile} lowercases the file name
-     * before matching so the mask stays case-insensitive on case-sensitive
-     * filesystems (Linux/CI) as well as on Windows.
-     */
-    private static final PathMatcher MATROSKA_FILE_FILTER =
-            FileSystems.getDefault().getPathMatcher("glob:*.{mkv,mka,mk3d,webm,mks}");
 
     private FileFilter TXT_EXT_FILTER = new FileNameExtensionFilter("Plain text files (*.txt)", "txt");
 
@@ -1511,15 +1494,12 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     /* Start of INI configuration file methods */
 
     private void readIniFile() {
-        Ini ini = null;
-
-        if (iniFile.exists()) {
+        if (iniStore.exists()) {
             try {
-                ini = new Ini(iniFile);
-                String exePath = ini.get("General", "mkvpropedit");
+                String exePath = iniStore.readMkvpropedit();
 
                 if (exePath != null) {
-                    if (exePath.equals("mkvpropedit")) {
+                    if (exePath.equals(IniStore.DEFAULT_MKVPROPEDIT)) {
                         chbMkvPropExeDef.setSelected(true);
                         chbMkvPropExeDef.setEnabled(false);
                     } else {
@@ -1528,10 +1508,8 @@ public class JMkvpropedit implements AttachmentPanel.Host {
                         chbMkvPropExeDef.setEnabled(true);
                     }
                 }
-            } catch (InvalidFileFormatException e) {
-                appendOutput("Error: malformed " + iniFile.getName() + ": " + e + "\n");
-            } catch (IOException e) {
-                appendOutput("Error: could not read " + iniFile.getName() + ": " + e + "\n");
+            } catch (IniStoreException e) {
+                appendOutput("Error: " + e.getMessage() + "\n");
             }
         } else if (Utils.isWindows()) {
             String exePath = getMkvPropExeDefault();
@@ -1546,44 +1524,22 @@ public class JMkvpropedit implements AttachmentPanel.Host {
     }
 
     private void saveIniFile(File exeFile) {
-        Ini ini = null;
-
         txtMkvPropExe.setText(exeFile.toString());
         chbMkvPropExeDef.setSelected(false);
         chbMkvPropExeDef.setEnabled(true);
 
         try {
-            if (!iniFile.exists()) {
-                iniFile.createNewFile();
-            }
-
-            ini = new Ini(iniFile);
-            ini.put("General", "mkvpropedit", exeFile.toString());
-            ini.store();
-        } catch (InvalidFileFormatException e1) {
-            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
-        } catch (IOException e1) {
-            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
+            iniStore.saveMkvpropedit(exeFile.toString());
+        } catch (IniStoreException e) {
+            appendOutput("Error: " + e.getMessage() + "\n");
         }
     }
 
     private void defaultIniFile() {
-        Ini ini = null;
-
         try {
-            if (!iniFile.exists()) {
-                iniFile.createNewFile();
-            }
-
-            ini = new Ini(iniFile);
-
-            ini.put("General", "mkvpropedit", "mkvpropedit");
-
-            ini.store();
-        } catch (InvalidFileFormatException e1) {
-            appendOutput("Error: malformed " + iniFile.getName() + ": " + e1 + "\n");
-        } catch (IOException e1) {
-            appendOutput("Error: could not save " + iniFile.getName() + ": " + e1 + "\n");
+            iniStore.saveMkvpropedit(IniStore.DEFAULT_MKVPROPEDIT);
+        } catch (IniStoreException e) {
+            appendOutput("Error: " + e.getMessage() + "\n");
         }
     }
 
@@ -1643,44 +1599,16 @@ public class JMkvpropedit implements AttachmentPanel.Host {
         }
     }
 
-    /**
-     * Folder-scan mask for Matroska files, case-insensitive: mkv, mka, mk3d,
-     * webm, mks (replaces the commons-io {@code WildcardFileFilter}).
-     *
-     * @param path file to test; only the file name is matched
-     * @return true when the file name ends with a Matroska extension
-     */
-    static boolean isMatroskaFile(final Path path) {
-        final Path name = path.getFileName();
-
-        if (name == null) {
-            return false;
-        }
-
-        // Lowercase both sides: the glob is fixed lowercase, and normalizing
-        // the name makes *.mkv match *.MKV regardless of the filesystem's
-        // own case sensitivity.
-        return MATROSKA_FILE_FILTER.matches(
-                Path.of(name.toString().toLowerCase(Locale.ROOT)));
-    }
-
     private void addMkvFilesFromFolder(final File folder) {
-        Runnable tmpWorker = new Runnable() {
-            @Override
-            public void run() {
-                // Recursive scan, same as FileUtils.iterateFiles with
-                // TrueFileFilter dir filter; mask applies to file names only.
-                try (Stream<Path> walk = Files.walk(folder.toPath())) {
-                    walk.filter(Files::isRegularFile)
-                            .filter(JMkvpropedit::isMatroskaFile)
-                            .forEach(path -> addFile(path.toFile(), false));
-                } catch (IOException | UncheckedIOException e) {
-                    appendOutput("Error: could not scan " + folder + ": " + e + "\n");
+        SwingUtilities.invokeLater(() -> {
+            try {
+                for (Path path : FileScanner.scanMatroskaFiles(folder.toPath())) {
+                    addFile(path.toFile(), false);
                 }
+            } catch (IOException | UncheckedIOException e) {
+                appendOutput("Error: could not scan " + folder + ": " + e + "\n");
             }
-        };
-
-        SwingUtilities.invokeLater(tmpWorker);
+        });
     }
 
     /* End of file methods */
