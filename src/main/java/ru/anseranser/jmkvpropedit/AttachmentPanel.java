@@ -206,9 +206,9 @@ public final class AttachmentPanel extends JPanel {
         addCell(controls, bottom, 1, 4, GridBagConstraints.CENTER,
                 new Insets(0, 0, 0, 5), GridBagConstraints.BOTH);
         GridBagLayout bottomLayout = new GridBagLayout();
-        bottomLayout.columnWidths = new int[] { 0, 0, 0, 0 };
+        bottomLayout.columnWidths = new int[] { 0, 0, 0, 0, 0 };
         bottomLayout.rowHeights = new int[] { 0, 0 };
-        bottomLayout.columnWeights = new double[] { 0.0, 0.0, 0.0, Double.MIN_VALUE };
+        bottomLayout.columnWeights = new double[] { 0.0, 0.0, 0.0, 0.0, Double.MIN_VALUE };
         bottomLayout.rowWeights = new double[] { 0.0, Double.MIN_VALUE };
         bottom.setLayout(bottomLayout);
         addBottomButton(bottom, btnAdd, 0, new Insets(0, 0, 0, 5), GridBagConstraints.CENTER);
@@ -236,9 +236,9 @@ public final class AttachmentPanel extends JPanel {
         addCell(controls, selectorPanel, 1, 0, GridBagConstraints.CENTER,
                 new Insets(0, 0, 5, 5), GridBagConstraints.BOTH);
         GridBagLayout selectorLayout = new GridBagLayout();
-        selectorLayout.columnWidths = new int[] { 0, 0, 0 };
+        selectorLayout.columnWidths = new int[] { 0, 0, 0, 0 };
         selectorLayout.rowHeights = new int[] { 0, 0 };
-        selectorLayout.columnWeights = new double[] { 0.0, 0.0, Double.MIN_VALUE };
+        selectorLayout.columnWeights = new double[] { 0.0, 0.0, 0.0, Double.MIN_VALUE };
         selectorLayout.rowWeights = new double[] { 0.0, Double.MIN_VALUE };
         selectorPanel.setLayout(selectorLayout);
         ButtonGroup selectorGroup = buildSelectorRadios(selectorPanel,

@@ -195,12 +195,13 @@ public final class FileFiltersChecks {
         JMkvpropedit w = newWindow();
 
         List<List<String>> combos = new ArrayList<>();
-        combos.add(comboItems(w, "cbAttachAddMime"));
-        combos.add(comboItems(w, "cbAttachReplaceOrig"));
-        combos.add(comboItems(w, "cbAttachReplaceMime"));
-        combos.add(comboItems(w, "cbAttachDeleteValue"));
+        combos.add(comboItems(w, "attachmentAddPanel", "mimeCombo"));
+        combos.add(comboItems(w, "attachmentReplacePanel", "originalCombo"));
+        combos.add(comboItems(w, "attachmentReplacePanel", "mimeCombo"));
+        combos.add(comboItems(w, "attachmentDeletePanel", "valueCombo"));
 
-        String[] names = { "cbAttachAddMime", "cbAttachReplaceOrig", "cbAttachReplaceMime", "cbAttachDeleteValue" };
+        String[] names = { "attachmentAddPanel.mimeCombo", "attachmentReplacePanel.originalCombo",
+                "attachmentReplacePanel.mimeCombo", "attachmentDeletePanel.valueCombo" };
         for (int i = 0; i < combos.size(); i++) {
             List<String> items = combos.get(i);
             check(names[i] + ": no '_' artifact item", !items.contains("_"), "items head=" + head(items));
@@ -226,9 +227,13 @@ public final class FileFiltersChecks {
         return new JMkvpropedit();
     }
 
-    private static List<String> comboItems(JMkvpropedit w, String fieldName) throws Exception {
+    private static List<String> comboItems(JMkvpropedit w, String panelField, String getter) throws Exception {
+        Object panel = get(w, panelField);
+        Method method = panel.getClass().getDeclaredMethod(getter);
+        method.setAccessible(true);
+
         @SuppressWarnings("unchecked")
-        JComboBox<String> combo = (JComboBox<String>) get(w, fieldName);
+        JComboBox<String> combo = (JComboBox<String>) method.invoke(panel);
         DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) combo.getModel();
         List<String> items = new ArrayList<>();
         for (int i = 0; i < model.getSize(); i++) {
